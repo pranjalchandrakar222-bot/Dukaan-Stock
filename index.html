@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Dukaan Stock</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #1d4ed8;
+      --border: #e2e8f0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1120;
+        --card: #111827;
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --accent: #60a5fa;
+        --border: #1e293b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 24px 16px;
+    }
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, 0.05);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.9rem;
+      line-height: 1.25;
+    }
+    h2 {
+      margin-top: 28px;
+      font-size: 1.2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    p, li {
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+    strong { color: var(--text); }
+    a { color: var(--accent); }
+    .meta {
+      display: inline-block;
+      background: rgba(29, 78, 216, 0.08);
+      color: var(--accent);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9em;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="meta">Effective Date: November 13, 2026</span>
+    <h1>Privacy Policy for Dukaan Stock</h1>
+    <p>
+      This Privacy Policy explains how <strong>Dukaan Stock</strong> (package ID:
+      <code>com.aistudio.dukaanstock.vmrkqz</code>), developed and operated by
+      <strong>Pranjal Chandrakar</strong> ("we", "our", or "us"), collects, uses, stores, and protects
+      information when you use the Dukaan Stock Android application.
+    </p>
+
+    <h2>1. Information We Collect</h2>
+    <p>We only collect information strictly necessary to provide billing, inventory, khata ledger, and cloud-sync functionality:</p>
+    <ul>
+      <li>
+        <strong>Account &amp; Authentication Information:</strong> When you sign in using Google Sign-In
+        (via Android Credential Manager and Firebase Authentication), we receive your Google account
+        name, email address, and a unique Firebase User ID (UID) to authenticate you and isolate your
+        business workspace.
+      </li>
+      <li>
+        <strong>Business &amp; Financial Records You Enter:</strong> You may voluntarily enter and store
+        business details (business name, phone, email, GSTIN, address, invoice settings), customer and
+        supplier records (party names, phone numbers, emails, GSTINs, billing/shipping addresses, ledger
+        balances), inventory catalog data (item names, HSN/SAC codes, prices, tax rates, stock counts),
+        cash/bank/UPI account labels, and invoices, purchases, or expense transactions.
+      </li>
+      <li>
+        <strong>On-Device App Preferences:</strong> Theme preferences (such as Light, Dark, or System mode)
+        are stored locally on your device using Android Jetpack DataStore.
+      </li>
+    </ul>
+
+    <h2>2. Permissions Used</h2>
+    <p>Dukaan Stock follows least-privilege access and requests only network permissions required for authentication and cloud synchronization:</p>
+    <ul>
+      <li><code>INTERNET</code> &amp; <code>ACCESS_NETWORK_STATE</code> — Used solely for Google Sign-In and syncing your business data with Cloud Firestore.</li>
+    </ul>
+    <p>The app does <strong>not</strong> access your device contacts, camera, microphone, precise location, SMS, call logs, or external media storage.</p>
+
+    <h2>3. How We Use Your Information</h2>
+    <ul>
+      <li>To authenticate your account securely using Google Sign-In.</li>
+      <li>To store, sync, and back up your inventory, invoices, party ledgers, and reports across sessions.</li>
+      <li>To calculate GST totals, stock levels, balances, and business summaries inside the app.</li>
+    </ul>
+    <p>
+      We do <strong>not</strong> sell, rent, or trade your personal or business data to third parties, and
+      the app contains <strong>no third-party advertising SDKs</strong>.
+    </p>
+
+    <h2>4. Third-Party Services &amp; Data Storage</h2>
+    <p>Dukaan Stock relies on Google Firebase services to operate reliably:</p>
+    <ul>
+      <li>
+        <strong>Google Sign-In / Firebase Authentication</strong> — For secure user login
+        (<a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a>).
+      </li>
+      <li>
+        <strong>Google Cloud Firestore</strong> — For storing and synchronizing your workspace records per user ID
+        (<a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Firebase Privacy &amp; Security</a>).
+      </li>
+    </ul>
+
+    <h2>5. Data Security</h2>
+    <p>
+      All communication between the app and Firebase servers is encrypted in transit using HTTPS/TLS.
+      Access to Cloud Firestore records is restricted by authenticated security rules so that only your
+      signed-in Google account can read or modify your business workspace.
+    </p>
+
+    <h2>6. Data Retention &amp; Account Deletion</h2>
+    <p>
+      Your business records remain stored in your private workspace as long as you maintain your account.
+      You can edit or delete parties, inventory items, and bank/cash accounts directly inside the app at any time.
+    </p>
+    <p>
+      <strong>Requesting Complete Account &amp; Data Deletion:</strong> To request permanent deletion of your
+      Dukaan Stock account and all associated Cloud Firestore data, please email
+      <a href="mailto:pranjalchandrakar222@gmail.com?subject=Dukaan%20Stock%20Account%20Deletion%20Request">pranjalchandrakar222@gmail.com</a>
+      from your registered Google email address with the subject line
+      <em>"Dukaan Stock Account Deletion Request"</em>. We will verify ownership and permanently delete your
+      account and cloud records within 30 days.
+    </p>
+
+    <h2>7. Children's Privacy</h2>
+    <p>
+      Dukaan Stock is a business management utility and is not intended for children under the age of 13
+      (or the applicable minimum age in your jurisdiction). We do not knowingly collect personal information
+      from children.
+    </p>
+
+    <h2>8. Changes to This Privacy Policy</h2>
+    <p>
+      We may update this Privacy Policy from time to time to reflect app updates or legal requirements. Any
+      changes will be posted on this page with an updated effective date.
+    </p>
+
+    <h2>9. Contact Us</h2>
+    <p>
+      If you have questions, feedback, or privacy/deletion requests regarding Dukaan Stock, please contact:
+      <br />
+      <strong>Developer:</strong> Pranjal Chandrakar<br />
+      <strong>Email:</strong> <a href="mailto:pranjalchandrakar222@gmail.com">pranjalchandrakar222@gmail.com</a>
+    </p>
+
+    <footer>
+      &copy; 2026 Dukaan Stock (com.aistudio.dukaanstock.vmrkqz). All rights reserved.
+    </footer>
+  </main>
+</body>
+</html>

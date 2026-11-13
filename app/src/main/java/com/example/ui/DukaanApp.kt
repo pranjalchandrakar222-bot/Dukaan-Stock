@@ -562,9 +562,9 @@ private fun DukaanAuthenticatedShell(
               verticalAlignment = Alignment.CenterVertically,
             ) {
               Image(
-                painter = painterResource(id = R.drawable.ic_dukaan_logo_1794570957444),
+                painter = painterResource(id = R.drawable.ic_dukaan_logo),
                 contentDescription = "Dukaan Stock Logo",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
               )
               Spacer(modifier = Modifier.width(10.dp))
@@ -910,14 +910,14 @@ private fun DukaanAuthenticatedShell(
             TopAppBar(
               navigationIcon = {
                 Image(
-                  painter = painterResource(id = R.drawable.ic_dukaan_logo_1794570957444),
+                  painter = painterResource(id = R.drawable.ic_dukaan_logo),
                   contentDescription = "Dukaan Stock",
-                  contentScale = ContentScale.Crop,
+                  contentScale = ContentScale.Fit,
                   modifier =
                     Modifier
                       .padding(start = 12.dp)
-                      .size(34.dp)
-                      .clip(RoundedCornerShape(9.dp))
+                      .size(36.dp)
+                      .clip(RoundedCornerShape(10.dp))
                       .clickable { activeNav = AppNavTarget.HOME },
                 )
               },

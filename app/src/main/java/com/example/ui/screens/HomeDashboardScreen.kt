@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -45,10 +46,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.model.BusinessProfile
 import com.example.data.model.BusinessTransaction
 import com.example.data.model.TxStatus
@@ -104,24 +108,36 @@ fun HomeDashboardScreen(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = profile?.businessName?.ifBlank { "My Dukaan Store" } ?: "My Dukaan Store",
-                  style = MaterialTheme.typography.headlineSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.onSurface,
+              Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Image(
+                  painter = painterResource(id = R.drawable.ic_dukaan_logo),
+                  contentDescription = "Dukaan Stock Logo",
+                  contentScale = ContentScale.Fit,
+                  modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)),
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                  text =
-                    if (recentTransactions.isEmpty()) {
-                      "Create your first GST invoice in less than a minute"
-                    } else {
-                      "${recentTransactions.size} recorded transactions • Live cloud sync active"
-                    },
-                  style = MaterialTheme.typography.bodyMedium,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = profile?.businessName?.ifBlank { "My Dukaan Store" } ?: "My Dukaan Store",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  )
+                  Spacer(modifier = Modifier.height(2.dp))
+                  Text(
+                    text =
+                      if (recentTransactions.isEmpty()) {
+                        "Create your first GST invoice in less than a minute"
+                      } else {
+                        "${recentTransactions.size} recorded transactions • Live cloud sync active"
+                      },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
               }
               if (isWide) {
                 Button(
