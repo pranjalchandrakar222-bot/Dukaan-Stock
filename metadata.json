@@ -1,0 +1,6 @@
+{
+  "name": "Dukaan Stock",
+  "description": "Mobile & desktop adaptive GST billing, stock inventory, party khata ledger, cash/bank, and business reports app with Google Sign-In and Cloud Firestore sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

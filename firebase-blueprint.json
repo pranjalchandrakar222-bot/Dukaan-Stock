@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "BusinessProfile": {
+      "title": "BusinessProfile",
+      "description": "Store profile, GSTIN, invoice numbering, and UI theme preference for a Dukaan Stock business owner.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of owner" },
+        "businessName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "gstin": { "type": "string" },
+        "address": { "type": "string" },
+        "stateName": { "type": "string" },
+        "currencySymbol": { "type": "string" },
+        "invoicePrefix": { "type": "string" },
+        "nextInvoiceNumber": { "type": "integer" },
+        "bankDetails": { "type": "string" },
+        "invoiceTerms": { "type": "string" },
+        "themeStyle": {
+          "type": "string",
+          "enum": ["DYNAMIC", "COBALT", "EMERALD", "TERRACOTTA", "SLATE"]
+        },
+        "stopNegativeStock": { "type": "boolean" },
+        "roundOffTotal": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": [
+        "userId",
+        "businessName",
+        "currencySymbol",
+        "nextInvoiceNumber",
+        "themeStyle",
+        "stopNegativeStock",
+        "roundOffTotal",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Party": {
+      "title": "Party",
+      "description": "Customer or supplier khata ledger account.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "partyType": { "type": "string", "enum": ["CUSTOMER", "SUPPLIER", "BOTH"] },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "gstin": { "type": "string" },
+        "billingAddress": { "type": "string" },
+        "shippingAddress": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "partyType", "openingBalance", "currentBalance", "createdAt", "updatedAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Product or service item with HSN/SAC, pricing, GST slab, and live stock tracking.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "itemType": { "type": "string", "enum": ["PRODUCT", "SERVICE"] },
+        "hsnSac": { "type": "string" },
+        "itemCode": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "salePrice": { "type": "number" },
+        "salePriceWithTax": { "type": "boolean" },
+        "wholesalePrice": { "type": "number" },
+        "purchasePrice": { "type": "number" },
+        "discountPercent": { "type": "number" },
+        "taxRatePercent": { "type": "number" },
+        "openingStock": { "type": "number" },
+        "currentStock": { "type": "number" },
+        "minStockLevel": { "type": "number" },
+        "location": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "name",
+        "itemType",
+        "unit",
+        "salePrice",
+        "purchasePrice",
+        "taxRatePercent",
+        "currentStock",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CashBankAccount": {
+      "title": "CashBankAccount",
+      "description": "Cash register, bank account, or UPI wallet ledger.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "accountName": { "type": "string" },
+        "accountType": { "type": "string", "enum": ["CASH", "BANK", "UPI"] },
+        "bankName": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "ifscCode": { "type": "string" },
+        "upiId": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "accountName", "accountType", "openingBalance", "currentBalance", "createdAt", "updatedAt"]
+    },
+    "BusinessTransaction": {
+      "title": "BusinessTransaction",
+      "description": "GST invoice, purchase bill, expense, estimate, order, or payment voucher.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "txType": {
+          "type": "string",
+          "enum": [
+            "SALE",
+            "PAYMENT_IN",
+            "ESTIMATE",
+            "SALE_ORDER",
+            "DELIVERY_CHALLAN",
+            "CREDIT_NOTE",
+            "PURCHASE",
+            "PAYMENT_OUT",
+            "EXPENSE",
+            "PURCHASE_ORDER",
+            "DEBIT_NOTE"
+          ]
+        },
+        "refNumber": { "type": "string" },
+        "dateMillis": { "type": "integer" },
+        "partyId": { "type": "string" },
+        "partyName": { "type": "string" },
+        "category": { "type": "string" },
+        "paymentMode": { "type": "string", "enum": ["CASH", "UPI", "BANK_TRANSFER", "CARD", "CHEQUE"] },
+        "accountId": { "type": "string" },
+        "lineItems": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "roundOffAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "balanceAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PAID", "PARTIAL", "UNPAID", "OPEN", "CONVERTED", "CANCELLED"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "txType",
+        "refNumber",
+        "dateMillis",
+        "totalAmount",
+        "paidAmount",
+        "balanceAmount",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/BusinessProfile" },
+      "description": "Business settings document (docId: profile)"
+    },
+    "/users/{userId}/parties/{partyId}": {
+      "schema": { "$ref": "#/entities/Party" },
+      "description": "User-owned customer and supplier party ledgers"
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "User-owned inventory products and services"
+    },
+    "/users/{userId}/accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/CashBankAccount" },
+      "description": "User-owned cash registers, bank accounts, and UPI wallets"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/BusinessTransaction" },
+      "description": "User-owned sales, purchases, expenses, estimates, and payment vouchers"
+    }
+  }
+}

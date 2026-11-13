@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all reads/writes unless explicitly matched below
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isOptionalStr(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isValidProfile(data, userId) {
+      return data.userId == userId &&
+             data.businessName is string && data.businessName.size() >= 1 && data.businessName.size() <= 120 &&
+             isOptionalStr(data, 'phone', 40) &&
+             isOptionalStr(data, 'email', 120) &&
+             isOptionalStr(data, 'gstin', 30) &&
+             isOptionalStr(data, 'address', 300) &&
+             isOptionalStr(data, 'stateName', 80) &&
+             data.currencySymbol is string && data.currencySymbol.size() >= 1 && data.currencySymbol.size() <= 5 &&
+             isOptionalStr(data, 'invoicePrefix', 20) &&
+             data.nextInvoiceNumber is int && data.nextInvoiceNumber >= 1 &&
+             isOptionalStr(data, 'bankDetails', 300) &&
+             isOptionalStr(data, 'invoiceTerms', 400) &&
+             data.themeStyle in ['DYNAMIC', 'COBALT', 'EMERALD', 'TERRACOTTA', 'SLATE'] &&
+             data.stopNegativeStock is bool &&
+             data.roundOffTotal is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidParty(data, userId) {
+      return data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.partyType in ['CUSTOMER', 'SUPPLIER', 'BOTH'] &&
+             isOptionalStr(data, 'phone', 40) &&
+             isOptionalStr(data, 'email', 120) &&
+             isOptionalStr(data, 'gstin', 30) &&
+             isOptionalStr(data, 'billingAddress', 300) &&
+             isOptionalStr(data, 'shippingAddress', 300) &&
+             data.openingBalance is number &&
+             data.currentBalance is number &&
+             isOptionalStr(data, 'notes', 500) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidItem(data, userId) {
+      return data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.itemType in ['PRODUCT', 'SERVICE'] &&
+             isOptionalStr(data, 'hsnSac', 30) &&
+             isOptionalStr(data, 'itemCode', 40) &&
+             isOptionalStr(data, 'category', 80) &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             data.salePrice is number && data.salePrice >= 0 &&
+             (!('salePriceWithTax' in data) || data.salePriceWithTax is bool) &&
+             (!('wholesalePrice' in data) || (data.wholesalePrice is number && data.wholesalePrice >= 0)) &&
+             data.purchasePrice is number && data.purchasePrice >= 0 &&
+             (!('discountPercent' in data) || (data.discountPercent is number && data.discountPercent >= 0 && data.discountPercent <= 100)) &&
+             data.taxRatePercent is number && data.taxRatePercent >= 0 && data.taxRatePercent <= 100 &&
+             (!('openingStock' in data) || data.openingStock is number) &&
+             data.currentStock is number &&
+             (!('minStockLevel' in data) || (data.minStockLevel is number && data.minStockLevel >= 0)) &&
+             isOptionalStr(data, 'location', 120) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAccount(data, userId) {
+      return data.userId == userId &&
+             data.accountName is string && data.accountName.size() >= 1 && data.accountName.size() <= 100 &&
+             data.accountType in ['CASH', 'BANK', 'UPI'] &&
+             isOptionalStr(data, 'bankName', 100) &&
+             isOptionalStr(data, 'accountNumber', 40) &&
+             isOptionalStr(data, 'ifscCode', 20) &&
+             isOptionalStr(data, 'upiId', 100) &&
+             data.openingBalance is number &&
+             data.currentBalance is number &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidTransaction(data, userId) {
+      return data.userId == userId &&
+             data.txType in [
+               'SALE', 'PAYMENT_IN', 'ESTIMATE', 'SALE_ORDER', 'DELIVERY_CHALLAN',
+               'CREDIT_NOTE', 'PURCHASE', 'PAYMENT_OUT', 'EXPENSE', 'PURCHASE_ORDER', 'DEBIT_NOTE'
+             ] &&
+             data.refNumber is string && data.refNumber.size() <= 40 &&
+             data.dateMillis is int && data.dateMillis >= 0 &&
+             isOptionalStr(data, 'partyId', 128) &&
+             isOptionalStr(data, 'partyName', 120) &&
+             isOptionalStr(data, 'category', 80) &&
+             (!('paymentMode' in data) || data.paymentMode in ['CASH', 'UPI', 'BANK_TRANSFER', 'CARD', 'CHEQUE']) &&
+             isOptionalStr(data, 'accountId', 128) &&
+             (!('lineItems' in data) || (data.lineItems is list && data.lineItems.size() <= 100)) &&
+             (!('subtotal' in data) || data.subtotal is number) &&
+             (!('discountAmount' in data) || data.discountAmount is number) &&
+             (!('taxAmount' in data) || data.taxAmount is number) &&
+             (!('roundOffAmount' in data) || data.roundOffAmount is number) &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.paidAmount is number && data.paidAmount >= 0 &&
+             data.balanceAmount is number && data.balanceAmount >= 0 &&
+             data.status in ['PAID', 'PARTIAL', 'UNPAID', 'OPEN', 'CONVERTED', 'CANCELLED'] &&
+             isOptionalStr(data, 'notes', 500) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    match /users/{userId} {
+      match /settings/{settingId} {
+        allow get: if isOwner(userId) && isValidId(settingId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         settingId == 'profile' &&
+                         incoming().keys().hasAll([
+                           'userId', 'businessName', 'currencySymbol', 'nextInvoiceNumber',
+                           'themeStyle', 'stopNegativeStock', 'roundOffTotal', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'businessName', 'phone', 'email', 'gstin', 'address', 'stateName',
+                           'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber', 'bankDetails',
+                           'invoiceTerms', 'themeStyle', 'stopNegativeStock', 'roundOffTotal',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidProfile(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         settingId == 'profile' &&
+                         isValidProfile(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'businessName', 'phone', 'email', 'gstin', 'address', 'stateName',
+                             'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber', 'bankDetails',
+                             'invoiceTerms', 'themeStyle', 'stopNegativeStock', 'roundOffTotal', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['nextInvoiceNumber', 'updatedAt'])
+                         );
+        allow delete: if false;
+      }
+
+      match /parties/{partyId} {
+        allow get: if isOwner(userId) && isValidId(partyId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(partyId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'partyType', 'openingBalance', 'currentBalance',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'partyType', 'phone', 'email', 'gstin',
+                           'billingAddress', 'shippingAddress', 'openingBalance', 'currentBalance',
+                           'notes', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidParty(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         isValidId(partyId) &&
+                         isValidParty(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'partyType', 'phone', 'email', 'gstin',
+                             'billingAddress', 'shippingAddress', 'openingBalance', 'currentBalance',
+                             'notes', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['currentBalance', 'updatedAt'])
+                         );
+        allow delete: if isOwner(userId) && isValidId(partyId);
+      }
+
+      match /items/{itemId} {
+        allow get: if isOwner(userId) && isValidId(itemId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(itemId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'itemType', 'unit', 'salePrice', 'purchasePrice',
+                           'taxRatePercent', 'currentStock', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'itemType', 'hsnSac', 'itemCode', 'category', 'unit',
+                           'salePrice', 'salePriceWithTax', 'wholesalePrice', 'purchasePrice',
+                           'discountPercent', 'taxRatePercent', 'openingStock', 'currentStock',
+                           'minStockLevel', 'location', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidItem(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         isValidId(itemId) &&
+                         isValidItem(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'itemType', 'hsnSac', 'itemCode', 'category', 'unit',
+                             'salePrice', 'salePriceWithTax', 'wholesalePrice', 'purchasePrice',
+                             'discountPercent', 'taxRatePercent', 'openingStock', 'currentStock',
+                             'minStockLevel', 'location', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['currentStock', 'updatedAt'])
+                         );
+        allow delete: if isOwner(userId) && isValidId(itemId);
+      }
+
+      match /accounts/{accountId} {
+        allow get: if isOwner(userId) && isValidId(accountId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(accountId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'accountName', 'accountType', 'openingBalance',
+                           'currentBalance', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'accountName', 'accountType', 'bankName', 'accountNumber',
+                           'ifscCode', 'upiId', 'openingBalance', 'currentBalance',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidAccount(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         isValidId(accountId) &&
+                         isValidAccount(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'accountName', 'accountType', 'bankName', 'accountNumber',
+                             'ifscCode', 'upiId', 'openingBalance', 'currentBalance', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['currentBalance', 'updatedAt'])
+                         );
+        allow delete: if isOwner(userId) && isValidId(accountId);
+      }
+
+      match /transactions/{transactionId} {
+        allow get: if isOwner(userId) && isValidId(transactionId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(transactionId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'txType', 'refNumber', 'dateMillis',
+                           'totalAmount', 'paidAmount', 'balanceAmount', 'status',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'txType', 'refNumber', 'dateMillis', 'partyId', 'partyName',
+                           'category', 'paymentMode', 'accountId', 'lineItems', 'subtotal',
+                           'discountAmount', 'taxAmount', 'roundOffAmount', 'totalAmount',
+                           'paidAmount', 'balanceAmount', 'status', 'notes',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTransaction(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         isValidId(transactionId) &&
+                         existing().status != 'CANCELLED' &&
+                         isValidTransaction(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           // Action 1: Settlement payment
+                           incoming().diff(existing()).affectedKeys().hasOnly(['paidAmount', 'balanceAmount', 'status', 'updatedAt']) ||
+                           // Action 2: Cancel voucher/invoice
+                           (incoming().status == 'CANCELLED' &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+                         );
+        allow delete: if false;
+      }
+    }
+  }
+}
