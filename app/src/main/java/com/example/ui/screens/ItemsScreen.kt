@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -44,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -66,6 +66,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.BusinessProfile
+import com.example.data.model.BusinessTransaction
 import com.example.data.model.InventoryItem
 import com.example.data.model.ItemType
 import com.example.data.model.isLowStock
@@ -86,30 +87,34 @@ private enum class ItemFilter(val label: String) {
 @Composable
 fun ItemsScreen(
   items: List<InventoryItem>,
+  transactions: List<BusinessTransaction>,
   profile: BusinessProfile?,
   openAddDialogInitially: Boolean = false,
   onConsumeInitialDialog: () -> Unit = {},
   onSaveItem: (InventoryItem, () -> Unit) -> Unit,
-  onAdjustStock: (String, Double) -> Unit,
-  onDeleteItem: (String) -> Unit,
+  onAdjustStock: (String, Double, String) -> Unit,
+  onArchiveOrDeleteItem: (InventoryItem) -> Unit,
 ) {
   val sym = profile?.currencySymbol ?: "₹"
   val semantic = LocalDukaanColors.current
 
   var searchQuery by remember { mutableStateOf("") }
   var filter by remember { mutableStateOf(ItemFilter.ALL) }
+  var showArchived by remember { mutableStateOf(false) }
   var selectedItemId by remember { mutableStateOf<String?>(null) }
   var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
   var showEditorDialog by remember { mutableStateOf(openAddDialogInitially) }
   var stockAdjustItem by remember { mutableStateOf<InventoryItem?>(null) }
+  var confirmDeleteItem by remember { mutableStateOf<InventoryItem?>(null) }
 
   if (openAddDialogInitially) {
     onConsumeInitialDialog()
   }
 
   val filteredItems =
-    remember(items, searchQuery, filter) {
+    remember(items, searchQuery, filter, showArchived) {
       items.filter { item ->
+        val activeOk = showArchived || item.isActive
         val matchesQuery =
           searchQuery.isBlank() ||
             item.name.contains(searchQuery, ignoreCase = true) ||
@@ -123,14 +128,14 @@ fun ItemsScreen(
             ItemFilter.SERVICES -> item.itemType == ItemType.SERVICE.name
             ItemFilter.LOW_STOCK -> item.isLowStock()
           }
-        matchesQuery && matchesFilter
+        activeOk && matchesQuery && matchesFilter
       }
     }
 
   val selectedItem = remember(items, selectedItemId) { items.firstOrNull { it.id == selectedItemId } }
   val totalStockValue =
     items
-      .filter { it.itemType == ItemType.PRODUCT.name && it.currentStock > 0 }
+      .filter { it.isActive && it.itemType == ItemType.PRODUCT.name && it.currentStock > 0 }
       .sumOf { it.currentStock * (if (it.purchasePrice > 0) it.purchasePrice else it.salePrice) }
 
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -148,10 +153,7 @@ fun ItemsScreen(
           showEditorDialog = true
         },
         onAdjustStock = { stockAdjustItem = selectedItem },
-        onDelete = {
-          onDeleteItem(selectedItem.id)
-          selectedItemId = null
-        },
+        onDelete = { confirmDeleteItem = selectedItem },
         modifier = Modifier.fillMaxSize().padding(16.dp),
       )
     } else {
@@ -168,7 +170,7 @@ fun ItemsScreen(
             Column {
               Text("Items & Stock", style = MaterialTheme.typography.headlineSmall)
               Text(
-                "${items.size} items • Stock Value: ${formatCurrency(totalStockValue, sym)}",
+                "${items.count { it.isActive }} active items • Stock Value: ${formatCurrency(totalStockValue, sym)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
@@ -212,6 +214,11 @@ fun ItemsScreen(
                 label = { Text(f.label) },
               )
             }
+            FilterChip(
+              selected = showArchived,
+              onClick = { showArchived = !showArchived },
+              label = { Text("Show Archived") },
+            )
           }
 
           Spacer(modifier = Modifier.height(12.dp))
@@ -259,20 +266,22 @@ fun ItemsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                   ) {
                     Column(modifier = Modifier.weight(1f)) {
-                      Row(verticalAlignment = Alignment.CenterVertically) {
+                      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                           text = item.name,
                           style = MaterialTheme.typography.titleSmall,
                           fontWeight = FontWeight.SemiBold,
                           maxLines = 1,
                           overflow = TextOverflow.Ellipsis,
+                          modifier = Modifier.weight(1f, fill = false),
                         )
-                        if (lowStock) {
-                          Spacer(modifier = Modifier.width(8.dp))
+                        if (!item.isActive) {
+                          StatusBadgeChip("Archived", MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.surfaceVariant)
+                        } else if (lowStock) {
                           StatusBadgeChip(
-                            label = "Low Stock",
-                            color = semantic.warning,
-                            containerColor = semantic.warningContainer,
+                            label = "LOW STOCK",
+                            color = semantic.negative,
+                            containerColor = semantic.negativeContainer,
                           )
                         }
                       }
@@ -280,9 +289,10 @@ fun ItemsScreen(
                       Text(
                         text =
                           listOfNotNull(
-                            item.itemTypeEnum().label,
+                            item.hsnSac.takeIf { it.isNotBlank() }?.let { "HSN: $it" } ?: item.itemTypeEnum().label,
                             item.category.takeIf { it.isNotBlank() },
                             "GST ${formatQty(item.taxRatePercent)}%",
+                            item.commissionPercent.takeIf { it > 0 }?.let { "Comm ${formatQty(it)}%" },
                           ).joinToString(" • "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -324,10 +334,7 @@ fun ItemsScreen(
                   showEditorDialog = true
                 },
                 onAdjustStock = { stockAdjustItem = activeItem },
-                onDelete = {
-                  onDeleteItem(activeItem.id)
-                  selectedItemId = null
-                },
+                onDelete = { confirmDeleteItem = activeItem },
                 modifier = Modifier.fillMaxSize(),
               )
             } else {
@@ -359,9 +366,42 @@ fun ItemsScreen(
     StockAdjustDialog(
       item = adjustTarget,
       onDismiss = { stockAdjustItem = null },
-      onApply = { delta ->
-        onAdjustStock(adjustTarget.id, delta)
+      onApply = { delta, reason ->
+        onAdjustStock(adjustTarget.id, delta, reason)
         stockAdjustItem = null
+      },
+    )
+  }
+
+  val delItem = confirmDeleteItem
+  if (delItem != null) {
+    val hasTxs = transactions.any { tx -> tx.lineItems.any { it.itemId == delItem.id } }
+    AlertDialog(
+      onDismissRequest = { confirmDeleteItem = null },
+      title = { Text(if (hasTxs) "Archive ${delItem.name}?" else "Delete ${delItem.name}?") },
+      text = {
+        Text(
+          if (hasTxs) {
+            "${delItem.name} is referenced in existing invoices. Archiving hides it from billing while keeping GST & profit reports accurate."
+          } else {
+            "Permanently delete ${delItem.name}? This cannot be undone."
+          }
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            onArchiveOrDeleteItem(delItem)
+            if (selectedItemId == delItem.id) selectedItemId = null
+            confirmDeleteItem = null
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+        ) {
+          Text(if (hasTxs) "Archive" else "Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { confirmDeleteItem = null }) { Text("Cancel") }
       },
     )
   }
@@ -420,18 +460,19 @@ private fun ItemDetailPane(
             Icon(Icons.Filled.Edit, contentDescription = "Edit Item")
           }
           IconButton(onClick = onDelete) {
-            Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete Item", tint = MaterialTheme.colorScheme.error)
+            Icon(Icons.Filled.DeleteOutline, contentDescription = "Archive or Delete Item", tint = MaterialTheme.colorScheme.error)
           }
         }
       }
 
       if (item.itemType == ItemType.PRODUCT.name) {
         Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = if (lowStock) semantic.warningContainer else semantic.positiveContainer,
+          shape = RoundedCornerShape(16.dp),
+          color = if (lowStock) semantic.warningCardBg else semantic.positiveCardBg,
+          border = BorderStroke(1.dp, if (lowStock) semantic.warningCardBorder else semantic.positiveCardBorder),
         ) {
           Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
           ) {
@@ -439,6 +480,8 @@ private fun ItemDetailPane(
               Text(
                 if (lowStock) "Low Stock Alert" else "Available Stock",
                 style = MaterialTheme.typography.labelMedium,
+                color = if (lowStock) semantic.warning else semantic.positive,
+                fontWeight = FontWeight.SemiBold,
               )
               Text(
                 "${formatQty(item.currentStock)} ${item.unit}",
@@ -449,12 +492,13 @@ private fun ItemDetailPane(
               Text(
                 "Min Alert: ${formatQty(item.minStockLevel)} ${item.unit}",
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
             Button(
               onClick = onAdjustStock,
               shape = RoundedCornerShape(10.dp),
-              modifier = Modifier.testTag("adjust_stock_button"),
+              modifier = Modifier.height(44.dp).testTag("adjust_stock_button"),
             ) {
               Text("Adjust Stock")
             }
@@ -464,25 +508,93 @@ private fun ItemDetailPane(
 
       HorizontalDivider()
 
-      Text("Pricing & Tax", style = MaterialTheme.typography.titleMedium)
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        MetricBox("Sale Price", formatCurrency(item.salePrice, currencySymbol), Modifier.weight(1f))
-        MetricBox("Purchase Price", formatCurrency(item.purchasePrice, currencySymbol), Modifier.weight(1f))
+      Text("Pricing & Tax", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+      val marginPct = if (item.purchasePrice > 0.01 && item.salePrice > 0.0) {
+        ((item.salePrice - item.purchasePrice) / item.purchasePrice) * 100.0
+      } else null
+
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        MetricBox(
+          label = if (item.salePriceWithTax) "Sale Price (Incl. Tax)" else "Sale Price",
+          value = formatCurrency(item.salePrice, currencySymbol),
+          modifier = Modifier.weight(1f),
+        )
+        MetricBox(
+          label = "Purchase Price",
+          value = formatCurrency(item.purchasePrice, currencySymbol),
+          subtitle = marginPct?.let {
+            val sign = if (it >= 0) "+" else ""
+            "Margin $sign${formatQty(it)}%"
+          },
+          subtitleColor = if ((marginPct ?: 0.0) >= 0) semantic.positive else semantic.negative,
+          modifier = Modifier.weight(1f),
+        )
       }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        MetricBox("Wholesale Price", formatCurrency(item.wholesalePrice, currencySymbol), Modifier.weight(1f))
-        MetricBox("GST Rate", "${formatQty(item.taxRatePercent)}%", Modifier.weight(1f))
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        MetricBox("Wholesale Price", formatCurrency(item.wholesalePrice, currencySymbol), modifier = Modifier.weight(1f))
+        Surface(
+          modifier = Modifier.weight(1f),
+          shape = RoundedCornerShape(12.dp),
+          color = semantic.infoCardBg,
+          border = BorderStroke(1.dp, semantic.infoCardBorder),
+        ) {
+          Column(modifier = Modifier.padding(12.dp)) {
+            Text("GST Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              "${formatQty(item.taxRatePercent)}%",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary,
+            )
+            if (item.hsnSac.isNotBlank()) {
+              Text("HSN: ${item.hsnSac}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+        }
       }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        MetricBox("HSN / SAC", item.hsnSac.ifBlank { "-" }, Modifier.weight(1f))
-        MetricBox("Location / Godown", item.location.ifBlank { "-" }, Modifier.weight(1f))
+
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = semantic.infoCardBg,
+        border = BorderStroke(1.dp, semantic.infoCardBorder),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+          Text(
+            "Agent Commission (Internal)",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = if (item.commissionPercent > 0) {
+              "${formatQty(item.commissionPercent)}% default for this item"
+            } else {
+              "Uses assigned Agent / Mistri's default commission rate"
+            },
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+          )
+        }
+      }
+
+      if (item.location.isNotBlank()) {
+        MetricBox("Location / Godown", item.location, Modifier.fillMaxWidth())
       }
     }
   }
 }
 
 @Composable
-private fun MetricBox(label: String, value: String, modifier: Modifier = Modifier) {
+private fun MetricBox(
+  label: String,
+  value: String,
+  modifier: Modifier = Modifier,
+  subtitle: String? = null,
+  subtitleColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(12.dp),
@@ -492,7 +604,10 @@ private fun MetricBox(label: String, value: String, modifier: Modifier = Modifie
     Column(modifier = Modifier.padding(12.dp)) {
       Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       Spacer(modifier = Modifier.height(2.dp))
-      Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+      Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+      if (!subtitle.isNullOrBlank()) {
+        Text(subtitle, style = MaterialTheme.typography.labelSmall, color = subtitleColor, fontWeight = FontWeight.Medium)
+      }
     }
   }
 }
@@ -513,13 +628,14 @@ private fun ItemEditorDialog(
   var unit by remember { mutableStateOf(initial?.unit ?: "PCS") }
   var unitExpanded by remember { mutableStateOf(false) }
 
-  var editorTab by remember { mutableStateOf(0) } // 0 = Pricing, 1 = Stock
+  var editorTab by remember { mutableStateOf(0) }
 
   var salePriceText by remember { mutableStateOf(initial?.salePrice?.takeIf { it > 0 }?.toString() ?: "") }
   var saleWithTax by remember { mutableStateOf(initial?.salePriceWithTax ?: false) }
   var wholesaleText by remember { mutableStateOf(initial?.wholesalePrice?.takeIf { it > 0 }?.toString() ?: "") }
   var purchaseText by remember { mutableStateOf(initial?.purchasePrice?.takeIf { it > 0 }?.toString() ?: "") }
   var discountText by remember { mutableStateOf(initial?.discountPercent?.takeIf { it > 0 }?.toString() ?: "0") }
+  var commissionText by remember { mutableStateOf(initial?.commissionPercent?.takeIf { it > 0 }?.toString() ?: "") }
   var taxRate by remember { mutableStateOf(initial?.taxRatePercent ?: 0.0) }
   var taxExpanded by remember { mutableStateOf(false) }
 
@@ -603,10 +719,7 @@ private fun ItemEditorDialog(
             modifier = Modifier.weight(1f),
           )
           FilledTonalButton(
-            onClick = {
-              val code = "DS-${(1000..9999).random()}"
-              itemCode = code
-            },
+            onClick = { itemCode = "DS-${(1000..9999).random()}" },
             shape = RoundedCornerShape(10.dp),
           ) {
             Text("Assign Code")
@@ -671,26 +784,41 @@ private fun ItemEditorDialog(
               modifier = Modifier.weight(1f),
             )
           }
-          ExposedDropdownMenuBox(expanded = taxExpanded, onExpandedChange = { taxExpanded = it }) {
-            OutlinedTextField(
-              value = "GST ${formatQty(taxRate)}%",
-              onValueChange = {},
-              readOnly = true,
-              label = { Text("Tax Rate") },
-              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = taxExpanded) },
-              modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-            )
-            ExposedDropdownMenu(expanded = taxExpanded, onDismissRequest = { taxExpanded = false }) {
-              taxSlabs.forEach { slab ->
-                DropdownMenuItem(
-                  text = { Text("GST ${formatQty(slab)}%") },
-                  onClick = {
-                    taxRate = slab
-                    taxExpanded = false
-                  },
-                )
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExposedDropdownMenuBox(
+              expanded = taxExpanded,
+              onExpandedChange = { taxExpanded = it },
+              modifier = Modifier.weight(1f),
+            ) {
+              OutlinedTextField(
+                value = "GST ${formatQty(taxRate)}%",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Tax Rate") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = taxExpanded) },
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+              )
+              ExposedDropdownMenu(expanded = taxExpanded, onDismissRequest = { taxExpanded = false }) {
+                taxSlabs.forEach { slab ->
+                  DropdownMenuItem(
+                    text = { Text("GST ${formatQty(slab)}%") },
+                    onClick = {
+                      taxRate = slab
+                      taxExpanded = false
+                    },
+                  )
+                }
               }
             }
+            OutlinedTextField(
+              value = commissionText,
+              onValueChange = { commissionText = it },
+              label = { Text("Agent Comm %") },
+              placeholder = { Text("Optional") },
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+              singleLine = true,
+              modifier = Modifier.weight(1f),
+            )
           }
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -748,10 +876,12 @@ private fun ItemEditorDialog(
               purchasePrice = (purchaseText.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0),
               discountPercent = (discountText.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0),
               taxRatePercent = taxRate,
+              commissionPercent = (commissionText.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0),
               openingStock = if (initial == null) openStock else initial.openingStock,
               currentStock = if (initial == null) openStock else initial.currentStock,
               minStockLevel = (minStockText.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0),
               location = location.trim(),
+              isActive = true,
             )
           onSave(updated)
         },
@@ -771,10 +901,11 @@ private fun ItemEditorDialog(
 private fun StockAdjustDialog(
   item: InventoryItem,
   onDismiss: () -> Unit,
-  onApply: (Double) -> Unit,
+  onApply: (Double, String) -> Unit,
 ) {
   var isAdd by remember { mutableStateOf(true) }
   var qtyText by remember { mutableStateOf("") }
+  var reason by remember { mutableStateOf("Physical Stock Count") }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -807,13 +938,20 @@ private fun StockAdjustDialog(
           singleLine = true,
           modifier = Modifier.fillMaxWidth(),
         )
+        OutlinedTextField(
+          value = reason,
+          onValueChange = { reason = it },
+          label = { Text("Adjustment Reason") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+        )
       }
     },
     confirmButton = {
       Button(
         onClick = {
           val qty = qtyText.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
-          if (qty > 0) onApply(if (isAdd) qty else -qty)
+          if (qty > 0) onApply(if (isAdd) qty else -qty, reason.ifBlank { "Manual Stock Adjustment" })
         },
         enabled = (qtyText.toDoubleOrNull() ?: 0.0) > 0,
       ) {

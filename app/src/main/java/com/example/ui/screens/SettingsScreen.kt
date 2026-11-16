@@ -26,17 +26,25 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +65,7 @@ import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.LocalDukaanColors
 import com.example.ui.theme.SlatePrimary
 import com.example.ui.theme.TerracottaPrimary
+import com.example.ui.util.TaxAndCommissionCalculator
 
 enum class DarkModePref(val label: String) {
   SYSTEM("System"),
@@ -64,6 +73,7 @@ enum class DarkModePref(val label: String) {
   DARK("Dark"),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
   profile: BusinessProfile?,
@@ -73,6 +83,7 @@ fun SettingsScreen(
   onSaveProfile: (BusinessProfile) -> Unit,
   onSelectThemeStyle: (ThemeStyle) -> Unit,
   onSignOut: () -> Unit,
+  onDeleteAccount: () -> Unit,
 ) {
   val semantic = LocalDukaanColors.current
 
@@ -82,13 +93,20 @@ fun SettingsScreen(
   var gstin by remember(profile) { mutableStateOf(profile?.gstin ?: "") }
   var address by remember(profile) { mutableStateOf(profile?.address ?: "") }
   var stateName by remember(profile) { mutableStateOf(profile?.stateName ?: "") }
+  var stateMenuExpanded by remember { mutableStateOf(false) }
   var currencySymbol by remember(profile) { mutableStateOf(profile?.currencySymbol ?: "₹") }
   var invoicePrefix by remember(profile) { mutableStateOf(profile?.invoicePrefix ?: "INV-") }
+  var useFinancialYearPrefix by remember(profile) { mutableStateOf(profile?.useFinancialYearPrefix ?: true) }
+  var upiId by remember(profile) { mutableStateOf(profile?.upiId ?: "") }
   var bankDetails by remember(profile) { mutableStateOf(profile?.bankDetails ?: "") }
   var invoiceTerms by remember(profile) { mutableStateOf(profile?.invoiceTerms ?: "Thanks for doing business with us!") }
   var stopNegativeStock by remember(profile) { mutableStateOf(profile?.stopNegativeStock ?: false) }
   var roundOffTotal by remember(profile) { mutableStateOf(profile?.roundOffTotal ?: true) }
-  val activeTheme = profile?.themeStyleEnum() ?: ThemeStyle.DYNAMIC
+  val activeTheme = profile?.themeStyleEnum() ?: ThemeStyle.COBALT
+
+  var showDeleteStep1 by remember { mutableStateOf(false) }
+  var showDeleteStep2 by remember { mutableStateOf(false) }
+  var deleteConfirmText by remember { mutableStateOf("") }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
@@ -195,7 +213,7 @@ fun SettingsScreen(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
       ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          Text("Business Profile & GST", style = MaterialTheme.typography.titleMedium)
+          Text("Business Profile, GST & Payments", style = MaterialTheme.typography.titleMedium)
 
           OutlinedTextField(
             value = businessName,
@@ -215,7 +233,14 @@ fun SettingsScreen(
             )
             OutlinedTextField(
               value = gstin,
-              onValueChange = { gstin = it.uppercase() },
+              onValueChange = {
+                val up = it.uppercase()
+                gstin = up
+                if (stateName.isBlank()) {
+                  val derived = TaxAndCommissionCalculator.stateFromGstin(up)
+                  if (derived.isNotBlank()) stateName = derived
+                }
+              },
               label = { Text("GSTIN") },
               singleLine = true,
               modifier = Modifier.weight(1f),
@@ -238,19 +263,60 @@ fun SettingsScreen(
           )
 
           Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(
-              value = stateName,
-              onValueChange = { stateName = it },
-              label = { Text("State") },
-              singleLine = true,
+            ExposedDropdownMenuBox(
+              expanded = stateMenuExpanded,
+              onExpandedChange = { stateMenuExpanded = it },
               modifier = Modifier.weight(1f),
-            )
+            ) {
+              OutlinedTextField(
+                value = stateName,
+                onValueChange = { stateName = it },
+                label = { Text("Home State (for CGST/IGST)") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateMenuExpanded) },
+                singleLine = true,
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
+              )
+              val matchingStates = TaxAndCommissionCalculator.indianStates.filter {
+                stateName.isBlank() || it.contains(stateName, ignoreCase = true)
+              }
+              if (matchingStates.isNotEmpty()) {
+                ExposedDropdownMenu(
+                  expanded = stateMenuExpanded,
+                  onDismissRequest = { stateMenuExpanded = false },
+                ) {
+                  matchingStates.take(8).forEach { st ->
+                    DropdownMenuItem(
+                      text = { Text(st) },
+                      onClick = {
+                        stateName = st
+                        stateMenuExpanded = false
+                      },
+                    )
+                  }
+                }
+              }
+            }
             OutlinedTextField(
               value = invoicePrefix,
               onValueChange = { invoicePrefix = it },
               label = { Text("Invoice Prefix") },
               singleLine = true,
               modifier = Modifier.weight(0.7f),
+            )
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text("Financial Year Invoice Prefix", style = MaterialTheme.typography.bodyMedium)
+              Text("Format e.g. INV/26-27/0001", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(
+              checked = useFinancialYearPrefix,
+              onCheckedChange = { useFinancialYearPrefix = it },
             )
           }
 
@@ -270,6 +336,15 @@ fun SettingsScreen(
               }
             }
           }
+
+          OutlinedTextField(
+            value = upiId,
+            onValueChange = { upiId = it },
+            label = { Text("Business UPI ID (for Pay via UPI button on invoices)") },
+            placeholder = { Text("e.g. myshop@okicici") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("settings_upi_input"),
+          )
 
           OutlinedTextField(
             value = bankDetails,
@@ -292,7 +367,7 @@ fun SettingsScreen(
           ) {
             Column(modifier = Modifier.weight(1f)) {
               Text("Stop Sale on Negative Stock", style = MaterialTheme.typography.bodyMedium)
-              Text("Warn when stock reaches zero", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text("Enforce stock limit during billing & adjustments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = stopNegativeStock, onCheckedChange = { stopNegativeStock = it })
           }
@@ -322,6 +397,8 @@ fun SettingsScreen(
                   stateName = stateName.trim(),
                   currencySymbol = currencySymbol,
                   invoicePrefix = invoicePrefix.trim(),
+                  useFinancialYearPrefix = useFinancialYearPrefix,
+                  upiId = upiId.trim(),
                   bankDetails = bankDetails.trim(),
                   invoiceTerms = invoiceTerms.trim(),
                   stopNegativeStock = stopNegativeStock,
@@ -345,35 +422,136 @@ fun SettingsScreen(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
       ) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(18.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Filled.CloudDone, contentDescription = null, tint = semantic.positive)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-              Text("Cloud Sync & Backup Active", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-              Text(
-                userEmail.ifBlank { "Signed in with Google" },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
+        Column(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+              Icon(Icons.Filled.CloudDone, contentDescription = null, tint = semantic.positive)
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Text("Cloud Sync & Backup Active", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                  userEmail.ifBlank { "Signed in with Google" },
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
+            OutlinedButton(
+              onClick = onSignOut,
+              colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+              shape = RoundedCornerShape(12.dp),
+              modifier = Modifier.testTag("sign_out_button"),
+            ) {
+              Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Sign Out")
             }
           }
-          OutlinedButton(
-            onClick = onSignOut,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.testTag("sign_out_button"),
+
+          Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
           ) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Sign Out")
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(14.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  "Delete Account & Cloud Data",
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                  "Permanently erase all invoices, parties, items, agents, and account credentials.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              OutlinedButton(
+                onClick = { showDeleteStep1 = true },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("delete_account_button"),
+              ) {
+                Icon(Icons.Filled.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Delete")
+              }
+            }
           }
         }
       }
     }
+  }
+
+  if (showDeleteStep1) {
+    AlertDialog(
+      onDismissRequest = { showDeleteStep1 = false },
+      title = { Text("Delete Account & All Data?") },
+      text = {
+        Text(
+          "This permanently removes your business profile, parties, inventory items, agents, commission ledgers, cash/bank accounts, and every invoice from the cloud. Export any GST/PDF reports you need before continuing."
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showDeleteStep1 = false
+            deleteConfirmText = ""
+            showDeleteStep2 = true
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+        ) {
+          Text("Continue")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDeleteStep1 = false }) { Text("Cancel") }
+      },
+    )
+  }
+
+  if (showDeleteStep2) {
+    AlertDialog(
+      onDismissRequest = { showDeleteStep2 = false },
+      title = { Text("Final Confirmation") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Type DELETE in uppercase below to permanently erase your account.")
+          OutlinedTextField(
+            value = deleteConfirmText,
+            onValueChange = { deleteConfirmText = it.trim().uppercase() },
+            label = { Text("Type DELETE") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("confirm_delete_account_input"),
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showDeleteStep2 = false
+            onDeleteAccount()
+          },
+          enabled = deleteConfirmText == "DELETE",
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+          modifier = Modifier.testTag("confirm_delete_account_button"),
+        ) {
+          Text("Delete Permanently")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDeleteStep2 = false }) { Text("Cancel") }
+      },
+    )
   }
 }

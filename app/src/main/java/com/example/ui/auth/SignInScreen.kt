@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CloudDone
@@ -41,8 +40,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -333,19 +335,12 @@ private fun HeroGlowBackdrop(modifier: Modifier = Modifier) {
 private fun BrandHeaderBlock(centered: Boolean) {
   if (centered) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-      Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.14f),
-        border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.30f)),
-        shadowElevation = 8.dp,
-      ) {
-        Image(
-          painter = painterResource(id = R.drawable.ic_dukaan_logo),
-          contentDescription = "Dukaan Stock Logo",
-          contentScale = ContentScale.Fit,
-          modifier = Modifier.padding(4.dp).size(72.dp).clip(RoundedCornerShape(18.dp)),
-        )
-      }
+      Image(
+        painter = painterResource(id = R.drawable.ic_dukaan_logo),
+        contentDescription = "Dukaan Stock Logo",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.size(84.dp),
+      )
       Spacer(modifier = Modifier.height(14.dp))
       Text(
         text = "Dukaan Stock",
@@ -370,19 +365,12 @@ private fun BrandHeaderBlock(centered: Boolean) {
     }
   } else {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White.copy(alpha = 0.14f),
-        border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.28f)),
-        shadowElevation = 8.dp,
-      ) {
-        Image(
-          painter = painterResource(id = R.drawable.ic_dukaan_logo),
-          contentDescription = "Dukaan Stock Logo",
-          contentScale = ContentScale.Fit,
-          modifier = Modifier.padding(4.dp).size(68.dp).clip(RoundedCornerShape(16.dp)),
-        )
-      }
+      Image(
+        painter = painterResource(id = R.drawable.ic_dukaan_logo),
+        contentDescription = "Dukaan Stock Logo",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.size(72.dp),
+      )
       Spacer(modifier = Modifier.width(16.dp))
       Column {
         Text(
@@ -572,14 +560,15 @@ private fun SignInActionCard(
         }
       }
 
-      Button(
+      OutlinedButton(
         onClick = onSignInClick,
         enabled = !isLoading && !isCheckingSilent,
         shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors =
-          ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+          ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
           ),
         modifier =
           Modifier
@@ -590,7 +579,7 @@ private fun SignInActionCard(
         if (isLoading || isCheckingSilent) {
           CircularProgressIndicator(
             modifier = Modifier.size(20.dp),
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.primary,
             strokeWidth = 2.5.dp,
           )
           Spacer(modifier = Modifier.width(10.dp))
@@ -599,12 +588,8 @@ private fun SignInActionCard(
             style = MaterialTheme.typography.labelLarge,
           )
         } else {
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.Login,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-          )
-          Spacer(modifier = Modifier.width(10.dp))
+          GoogleGMark(modifier = Modifier.size(20.dp))
+          Spacer(modifier = Modifier.width(12.dp))
           Text(
             text = "Continue with Google",
             style = MaterialTheme.typography.titleSmall,
@@ -649,5 +634,62 @@ private fun SignInActionCard(
         }
       }
     }
+  }
+}
+
+@Composable
+private fun GoogleGMark(modifier: Modifier = Modifier) {
+  Canvas(modifier = modifier) {
+    val stroke = Stroke(width = size.minDimension * 0.21f, cap = StrokeCap.Butt)
+    val pad = stroke.width / 2f
+    val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke.width, size.height - stroke.width)
+    val topLeft = Offset(pad, pad)
+    // Blue right/bottom-right arc
+    drawArc(
+      color = Color(0xFF4285F4),
+      startAngle = -35f,
+      sweepAngle = 80f,
+      useCenter = false,
+      topLeft = topLeft,
+      size = arcSize,
+      style = stroke,
+    )
+    // Green bottom arc
+    drawArc(
+      color = Color(0xFF34A853),
+      startAngle = 45f,
+      sweepAngle = 110f,
+      useCenter = false,
+      topLeft = topLeft,
+      size = arcSize,
+      style = stroke,
+    )
+    // Yellow left arc
+    drawArc(
+      color = Color(0xFFFBBC05),
+      startAngle = 155f,
+      sweepAngle = 60f,
+      useCenter = false,
+      topLeft = topLeft,
+      size = arcSize,
+      style = stroke,
+    )
+    // Red top arc
+    drawArc(
+      color = Color(0xFFEA4335),
+      startAngle = 215f,
+      sweepAngle = 105f,
+      useCenter = false,
+      topLeft = topLeft,
+      size = arcSize,
+      style = stroke,
+    )
+    // Horizontal blue bar
+    drawLine(
+      color = Color(0xFF4285F4),
+      start = Offset(size.width * 0.50f, size.height * 0.50f),
+      end = Offset(size.width * 0.94f, size.height * 0.50f),
+      strokeWidth = stroke.width,
+    )
   }
 }

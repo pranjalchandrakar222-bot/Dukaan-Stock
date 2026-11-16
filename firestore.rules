@@ -35,6 +35,22 @@ service cloud.firestore {
       return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
     }
 
+    function isOptionalNum(data, key) {
+      return !(key in data) || data[key] is number;
+    }
+
+    function isOptionalNonNegNum(data, key) {
+      return !(key in data) || (data[key] is number && data[key] >= 0);
+    }
+
+    function isOptionalCounter(data, key) {
+      return !(key in data) || (data[key] is int && data[key] >= 1);
+    }
+
+    function isOptionalBool(data, key) {
+      return !(key in data) || data[key] is bool;
+    }
+
     function isValidProfile(data, userId) {
       return data.userId == userId &&
              data.businessName is string && data.businessName.size() >= 1 && data.businessName.size() <= 120 &&
@@ -46,6 +62,17 @@ service cloud.firestore {
              data.currencySymbol is string && data.currencySymbol.size() >= 1 && data.currencySymbol.size() <= 5 &&
              isOptionalStr(data, 'invoicePrefix', 20) &&
              data.nextInvoiceNumber is int && data.nextInvoiceNumber >= 1 &&
+             isOptionalCounter(data, 'nextPurchaseNumber') &&
+             isOptionalCounter(data, 'nextEstimateNumber') &&
+             isOptionalCounter(data, 'nextSaleOrderNumber') &&
+             isOptionalCounter(data, 'nextChallanNumber') &&
+             isOptionalCounter(data, 'nextCreditNoteNumber') &&
+             isOptionalCounter(data, 'nextDebitNoteNumber') &&
+             isOptionalCounter(data, 'nextPaymentNumber') &&
+             isOptionalCounter(data, 'nextExpenseNumber') &&
+             isOptionalCounter(data, 'nextCommissionPayoutNumber') &&
+             isOptionalBool(data, 'useFinancialYearPrefix') &&
+             isOptionalStr(data, 'upiId', 100) &&
              isOptionalStr(data, 'bankDetails', 300) &&
              isOptionalStr(data, 'invoiceTerms', 400) &&
              data.themeStyle in ['DYNAMIC', 'COBALT', 'EMERALD', 'TERRACOTTA', 'SLATE'] &&
@@ -62,10 +89,13 @@ service cloud.firestore {
              isOptionalStr(data, 'phone', 40) &&
              isOptionalStr(data, 'email', 120) &&
              isOptionalStr(data, 'gstin', 30) &&
+             isOptionalStr(data, 'stateName', 80) &&
              isOptionalStr(data, 'billingAddress', 300) &&
              isOptionalStr(data, 'shippingAddress', 300) &&
              data.openingBalance is number &&
              data.currentBalance is number &&
+             isOptionalStr(data, 'defaultAgentId', 128) &&
+             isOptionalBool(data, 'isActive') &&
              isOptionalStr(data, 'notes', 500) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
@@ -80,15 +110,17 @@ service cloud.firestore {
              isOptionalStr(data, 'category', 80) &&
              data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
              data.salePrice is number && data.salePrice >= 0 &&
-             (!('salePriceWithTax' in data) || data.salePriceWithTax is bool) &&
-             (!('wholesalePrice' in data) || (data.wholesalePrice is number && data.wholesalePrice >= 0)) &&
+             isOptionalBool(data, 'salePriceWithTax') &&
+             isOptionalNonNegNum(data, 'wholesalePrice') &&
              data.purchasePrice is number && data.purchasePrice >= 0 &&
              (!('discountPercent' in data) || (data.discountPercent is number && data.discountPercent >= 0 && data.discountPercent <= 100)) &&
              data.taxRatePercent is number && data.taxRatePercent >= 0 && data.taxRatePercent <= 100 &&
-             (!('openingStock' in data) || data.openingStock is number) &&
+             (!('commissionPercent' in data) || (data.commissionPercent is number && data.commissionPercent >= 0 && data.commissionPercent <= 100)) &&
+             isOptionalNum(data, 'openingStock') &&
              data.currentStock is number &&
-             (!('minStockLevel' in data) || (data.minStockLevel is number && data.minStockLevel >= 0)) &&
+             isOptionalNonNegNum(data, 'minStockLevel') &&
              isOptionalStr(data, 'location', 120) &&
+             isOptionalBool(data, 'isActive') &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -103,6 +135,29 @@ service cloud.firestore {
              isOptionalStr(data, 'upiId', 100) &&
              data.openingBalance is number &&
              data.currentBalance is number &&
+             isOptionalBool(data, 'isActive') &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAgent(data, userId) {
+      return data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.agentType in ['AGENT', 'MISTRI', 'SALESMAN', 'ARCHITECT', 'CONTRACTOR', 'REFERRAL'] &&
+             isOptionalStr(data, 'phone', 40) &&
+             isOptionalStr(data, 'cityArea', 100) &&
+             isOptionalStr(data, 'upiId', 100) &&
+             isOptionalStr(data, 'bankDetails', 300) &&
+             isOptionalNonNegNum(data, 'defaultPercent') &&
+             isOptionalNonNegNum(data, 'defaultPerUnitAmount') &&
+             (!('defaultBasis' in data) || data.defaultBasis in ['TAXABLE', 'TOTAL', 'PROFIT', 'PER_UNIT']) &&
+             (!('defaultTrigger' in data) || data.defaultTrigger in ['ON_INVOICE', 'ON_COLLECTION']) &&
+             data.openingBalance is number &&
+             data.currentBalance is number &&
+             isOptionalNum(data, 'totalEarned') &&
+             isOptionalNum(data, 'totalPaid') &&
+             isOptionalBool(data, 'isActive') &&
+             isOptionalStr(data, 'notes', 500) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -111,24 +166,49 @@ service cloud.firestore {
       return data.userId == userId &&
              data.txType in [
                'SALE', 'PAYMENT_IN', 'ESTIMATE', 'SALE_ORDER', 'DELIVERY_CHALLAN',
-               'CREDIT_NOTE', 'PURCHASE', 'PAYMENT_OUT', 'EXPENSE', 'PURCHASE_ORDER', 'DEBIT_NOTE'
+               'CREDIT_NOTE', 'PURCHASE', 'PAYMENT_OUT', 'EXPENSE', 'PURCHASE_ORDER',
+               'DEBIT_NOTE', 'COMMISSION_PAYOUT', 'CASH_TRANSFER', 'CASH_ADJUSTMENT', 'STOCK_ADJUSTMENT'
              ] &&
              data.refNumber is string && data.refNumber.size() <= 40 &&
              data.dateMillis is int && data.dateMillis >= 0 &&
+             (!('dueDateMillis' in data) || (data.dueDateMillis is int && data.dueDateMillis >= 0)) &&
              isOptionalStr(data, 'partyId', 128) &&
              isOptionalStr(data, 'partyName', 120) &&
+             isOptionalStr(data, 'placeOfSupply', 80) &&
+             isOptionalBool(data, 'isInterState') &&
              isOptionalStr(data, 'category', 80) &&
              (!('paymentMode' in data) || data.paymentMode in ['CASH', 'UPI', 'BANK_TRANSFER', 'CARD', 'CHEQUE']) &&
              isOptionalStr(data, 'accountId', 128) &&
+             isOptionalStr(data, 'toAccountId', 128) &&
+             isOptionalStr(data, 'linkedTxId', 128) &&
              (!('lineItems' in data) || (data.lineItems is list && data.lineItems.size() <= 100)) &&
-             (!('subtotal' in data) || data.subtotal is number) &&
-             (!('discountAmount' in data) || data.discountAmount is number) &&
-             (!('taxAmount' in data) || data.taxAmount is number) &&
-             (!('roundOffAmount' in data) || data.roundOffAmount is number) &&
+             isOptionalNum(data, 'subtotal') &&
+             isOptionalNum(data, 'discountAmount') &&
+             isOptionalNum(data, 'billDiscountAmount') &&
+             isOptionalStr(data, 'extraChargesLabel', 80) &&
+             isOptionalNum(data, 'extraChargesAmount') &&
+             isOptionalNum(data, 'cgstAmount') &&
+             isOptionalNum(data, 'sgstAmount') &&
+             isOptionalNum(data, 'igstAmount') &&
+             isOptionalNum(data, 'taxAmount') &&
+             isOptionalNum(data, 'roundOffAmount') &&
              data.totalAmount is number && data.totalAmount >= 0 &&
              data.paidAmount is number && data.paidAmount >= 0 &&
              data.balanceAmount is number && data.balanceAmount >= 0 &&
              data.status in ['PAID', 'PARTIAL', 'UNPAID', 'OPEN', 'CONVERTED', 'CANCELLED'] &&
+             isOptionalStr(data, 'agentId', 128) &&
+             isOptionalStr(data, 'agentName', 120) &&
+             (!('commissionBasis' in data) || data.commissionBasis in ['TAXABLE', 'TOTAL', 'PROFIT', 'PER_UNIT']) &&
+             (!('commissionTrigger' in data) || data.commissionTrigger in ['ON_INVOICE', 'ON_COLLECTION']) &&
+             (!('commissionStatus' in data) || data.commissionStatus in ['NONE', 'ACCRUED', 'PENDING_COLLECTION', 'PARTIAL', 'PAID', 'REVERSED']) &&
+             isOptionalNonNegNum(data, 'commissionRatePercent') &&
+             isOptionalNonNegNum(data, 'commissionTotalAmount') &&
+             isOptionalNonNegNum(data, 'commissionAccruedAmount') &&
+             (!('commissionSplits' in data) || (data.commissionSplits is list && data.commissionSplits.size() <= 10)) &&
+             isOptionalNonNegNum(data, 'tdsPercent') &&
+             isOptionalNonNegNum(data, 'tdsAmount') &&
+             isOptionalStr(data, 'cancelReason', 300) &&
+             (!('cancelledAtMillis' in data) || (data.cancelledAtMillis is int && data.cancelledAtMillis >= 0)) &&
              isOptionalStr(data, 'notes', 500) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
@@ -146,7 +226,11 @@ service cloud.firestore {
                          ]) &&
                          incoming().keys().hasOnly([
                            'userId', 'businessName', 'phone', 'email', 'gstin', 'address', 'stateName',
-                           'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber', 'bankDetails',
+                           'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber',
+                           'nextPurchaseNumber', 'nextEstimateNumber', 'nextSaleOrderNumber',
+                           'nextChallanNumber', 'nextCreditNoteNumber', 'nextDebitNoteNumber',
+                           'nextPaymentNumber', 'nextExpenseNumber', 'nextCommissionPayoutNumber',
+                           'useFinancialYearPrefix', 'upiId', 'bankDetails',
                            'invoiceTerms', 'themeStyle', 'stopNegativeStock', 'roundOffTotal',
                            'createdAt', 'updatedAt'
                          ]) &&
@@ -158,12 +242,22 @@ service cloud.firestore {
                          incoming().createdAt == existing().createdAt && (
                            incoming().diff(existing()).affectedKeys().hasOnly([
                              'businessName', 'phone', 'email', 'gstin', 'address', 'stateName',
-                             'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber', 'bankDetails',
+                             'currencySymbol', 'invoicePrefix', 'nextInvoiceNumber',
+                             'nextPurchaseNumber', 'nextEstimateNumber', 'nextSaleOrderNumber',
+                             'nextChallanNumber', 'nextCreditNoteNumber', 'nextDebitNoteNumber',
+                             'nextPaymentNumber', 'nextExpenseNumber', 'nextCommissionPayoutNumber',
+                             'useFinancialYearPrefix', 'upiId', 'bankDetails',
                              'invoiceTerms', 'themeStyle', 'stopNegativeStock', 'roundOffTotal', 'updatedAt'
                            ]) ||
-                           incoming().diff(existing()).affectedKeys().hasOnly(['nextInvoiceNumber', 'updatedAt'])
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'nextInvoiceNumber', 'nextPurchaseNumber', 'nextEstimateNumber',
+                             'nextSaleOrderNumber', 'nextChallanNumber', 'nextCreditNoteNumber',
+                             'nextDebitNoteNumber', 'nextPaymentNumber', 'nextExpenseNumber',
+                             'nextCommissionPayoutNumber', 'updatedAt'
+                           ])
                          );
-        allow delete: if false;
+        // Deleting settings/profile is permitted by owner as step 1 of Google Play compliant account deletion
+        allow delete: if isOwner(userId) && settingId == 'profile';
       }
 
       match /parties/{partyId} {
@@ -176,9 +270,9 @@ service cloud.firestore {
                            'createdAt', 'updatedAt'
                          ]) &&
                          incoming().keys().hasOnly([
-                           'userId', 'name', 'partyType', 'phone', 'email', 'gstin',
+                           'userId', 'name', 'partyType', 'phone', 'email', 'gstin', 'stateName',
                            'billingAddress', 'shippingAddress', 'openingBalance', 'currentBalance',
-                           'notes', 'createdAt', 'updatedAt'
+                           'defaultAgentId', 'isActive', 'notes', 'createdAt', 'updatedAt'
                          ]) &&
                          isValidParty(incoming(), userId);
         allow update: if isOwner(userId) &&
@@ -187,9 +281,9 @@ service cloud.firestore {
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt && (
                            incoming().diff(existing()).affectedKeys().hasOnly([
-                             'name', 'partyType', 'phone', 'email', 'gstin',
+                             'name', 'partyType', 'phone', 'email', 'gstin', 'stateName',
                              'billingAddress', 'shippingAddress', 'openingBalance', 'currentBalance',
-                             'notes', 'updatedAt'
+                             'defaultAgentId', 'isActive', 'notes', 'updatedAt'
                            ]) ||
                            incoming().diff(existing()).affectedKeys().hasOnly(['currentBalance', 'updatedAt'])
                          );
@@ -208,8 +302,9 @@ service cloud.firestore {
                          incoming().keys().hasOnly([
                            'userId', 'name', 'itemType', 'hsnSac', 'itemCode', 'category', 'unit',
                            'salePrice', 'salePriceWithTax', 'wholesalePrice', 'purchasePrice',
-                           'discountPercent', 'taxRatePercent', 'openingStock', 'currentStock',
-                           'minStockLevel', 'location', 'createdAt', 'updatedAt'
+                           'discountPercent', 'taxRatePercent', 'commissionPercent',
+                           'openingStock', 'currentStock', 'minStockLevel', 'location',
+                           'isActive', 'createdAt', 'updatedAt'
                          ]) &&
                          isValidItem(incoming(), userId);
         allow update: if isOwner(userId) &&
@@ -220,8 +315,9 @@ service cloud.firestore {
                            incoming().diff(existing()).affectedKeys().hasOnly([
                              'name', 'itemType', 'hsnSac', 'itemCode', 'category', 'unit',
                              'salePrice', 'salePriceWithTax', 'wholesalePrice', 'purchasePrice',
-                             'discountPercent', 'taxRatePercent', 'openingStock', 'currentStock',
-                             'minStockLevel', 'location', 'updatedAt'
+                             'discountPercent', 'taxRatePercent', 'commissionPercent',
+                             'openingStock', 'currentStock', 'minStockLevel', 'location',
+                             'isActive', 'updatedAt'
                            ]) ||
                            incoming().diff(existing()).affectedKeys().hasOnly(['currentStock', 'updatedAt'])
                          );
@@ -240,7 +336,7 @@ service cloud.firestore {
                          incoming().keys().hasOnly([
                            'userId', 'accountName', 'accountType', 'bankName', 'accountNumber',
                            'ifscCode', 'upiId', 'openingBalance', 'currentBalance',
-                           'createdAt', 'updatedAt'
+                           'isActive', 'createdAt', 'updatedAt'
                          ]) &&
                          isValidAccount(incoming(), userId);
         allow update: if isOwner(userId) &&
@@ -250,11 +346,46 @@ service cloud.firestore {
                          incoming().createdAt == existing().createdAt && (
                            incoming().diff(existing()).affectedKeys().hasOnly([
                              'accountName', 'accountType', 'bankName', 'accountNumber',
-                             'ifscCode', 'upiId', 'openingBalance', 'currentBalance', 'updatedAt'
+                             'ifscCode', 'upiId', 'openingBalance', 'currentBalance',
+                             'isActive', 'updatedAt'
                            ]) ||
                            incoming().diff(existing()).affectedKeys().hasOnly(['currentBalance', 'updatedAt'])
                          );
         allow delete: if isOwner(userId) && isValidId(accountId);
+      }
+
+      match /agents/{agentId} {
+        allow get: if isOwner(userId) && isValidId(agentId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(agentId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'name', 'agentType', 'openingBalance', 'currentBalance',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'name', 'agentType', 'phone', 'cityArea', 'upiId', 'bankDetails',
+                           'defaultPercent', 'defaultPerUnitAmount', 'defaultBasis', 'defaultTrigger',
+                           'openingBalance', 'currentBalance', 'totalEarned', 'totalPaid',
+                           'isActive', 'notes', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidAgent(incoming(), userId);
+        allow update: if isOwner(userId) &&
+                         isValidId(agentId) &&
+                         isValidAgent(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt && (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'name', 'agentType', 'phone', 'cityArea', 'upiId', 'bankDetails',
+                             'defaultPercent', 'defaultPerUnitAmount', 'defaultBasis', 'defaultTrigger',
+                             'openingBalance', 'currentBalance', 'totalEarned', 'totalPaid',
+                             'isActive', 'notes', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'currentBalance', 'totalEarned', 'totalPaid', 'updatedAt'
+                           ])
+                         );
+        allow delete: if isOwner(userId) && isValidId(agentId);
       }
 
       match /transactions/{transactionId} {
@@ -268,11 +399,18 @@ service cloud.firestore {
                            'createdAt', 'updatedAt'
                          ]) &&
                          incoming().keys().hasOnly([
-                           'userId', 'txType', 'refNumber', 'dateMillis', 'partyId', 'partyName',
-                           'category', 'paymentMode', 'accountId', 'lineItems', 'subtotal',
-                           'discountAmount', 'taxAmount', 'roundOffAmount', 'totalAmount',
-                           'paidAmount', 'balanceAmount', 'status', 'notes',
-                           'createdAt', 'updatedAt'
+                           'userId', 'txType', 'refNumber', 'dateMillis', 'dueDateMillis',
+                           'partyId', 'partyName', 'placeOfSupply', 'isInterState', 'category',
+                           'paymentMode', 'accountId', 'toAccountId', 'linkedTxId', 'lineItems',
+                           'subtotal', 'discountAmount', 'billDiscountAmount',
+                           'extraChargesLabel', 'extraChargesAmount',
+                           'cgstAmount', 'sgstAmount', 'igstAmount', 'taxAmount', 'roundOffAmount',
+                           'totalAmount', 'paidAmount', 'balanceAmount', 'status',
+                           'agentId', 'agentName', 'commissionBasis', 'commissionTrigger',
+                           'commissionStatus', 'commissionRatePercent', 'commissionTotalAmount',
+                           'commissionAccruedAmount', 'commissionSplits',
+                           'tdsPercent', 'tdsAmount', 'cancelReason', 'cancelledAtMillis',
+                           'notes', 'createdAt', 'updatedAt'
                          ]) &&
                          isValidTransaction(incoming(), userId);
         allow update: if isOwner(userId) &&
@@ -281,13 +419,29 @@ service cloud.firestore {
                          isValidTransaction(incoming(), userId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt && (
-                           // Action 1: Settlement payment
-                           incoming().diff(existing()).affectedKeys().hasOnly(['paidAmount', 'balanceAmount', 'status', 'updatedAt']) ||
-                           // Action 2: Cancel voucher/invoice
+                           // Action 1: Settlement payment & proportional commission accrual
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'paidAmount', 'balanceAmount', 'status',
+                             'commissionAccruedAmount', 'commissionStatus', 'commissionSplits',
+                             'updatedAt'
+                           ]) ||
+                           // Action 2: Convert Estimate / Sale Order / Delivery Challan to Sale Invoice
+                           (incoming().status == 'CONVERTED' &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'status', 'linkedTxId', 'updatedAt'
+                            ])) ||
+                           // Action 3: Cancel voucher/invoice with reason & commission reversal
                            (incoming().status == 'CANCELLED' &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'status', 'cancelReason', 'cancelledAtMillis',
+                              'commissionStatus', 'commissionAccruedAmount', 'commissionSplits',
+                              'updatedAt'
+                            ]))
                          );
-        allow delete: if false;
+        // Ledger immutability: transactions cannot be deleted while the user profile exists.
+        // Only allowed during account deletion after settings/profile has been deleted.
+        allow delete: if isOwner(userId) &&
+                         !exists(/databases/$(database)/documents/users/$(userId)/settings/profile);
       }
     }
   }

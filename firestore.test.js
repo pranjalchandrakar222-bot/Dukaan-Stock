@@ -38,9 +38,10 @@ beforeEach(async () => {
   }
 });
 
-test("Unauthenticated user cannot read or write parties", async () => {
+test("Unauthenticated user cannot read or write parties or agents", async () => {
   const unauthDb = testEnv.unauthenticatedContext().firestore();
   await assertFails(unauthDb.collection("users").doc(ALICE_UID).collection("parties").get());
+  await assertFails(unauthDb.collection("users").doc(ALICE_UID).collection("agents").get());
   await assertFails(
     unauthDb.collection("users").doc(ALICE_UID).collection("parties").doc("p1").set({
       userId: ALICE_UID,
@@ -54,7 +55,7 @@ test("Unauthenticated user cannot read or write parties", async () => {
   );
 });
 
-test("Owner can create and read their own party and item", async () => {
+test("Owner can create and read their own party, item, and agent", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
   await assertSucceeds(
@@ -63,8 +64,10 @@ test("Owner can create and read their own party and item", async () => {
       name: "Sharma Traders",
       partyType: "CUSTOMER",
       phone: "9876543210",
+      stateName: "Maharashtra",
       openingBalance: 0,
       currentBalance: 0,
+      isActive: true,
       createdAt: now,
       updatedAt: now,
     })
@@ -78,34 +81,51 @@ test("Owner can create and read their own party and item", async () => {
       salePrice: 650,
       purchasePrice: 520,
       taxRatePercent: 5,
+      commissionPercent: 2.5,
       currentStock: 20,
+      isActive: true,
       createdAt: now,
       updatedAt: now,
     })
   );
-  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("parties").get());
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).collection("agents").doc("a1").set({
+      userId: ALICE_UID,
+      name: "Raju Mistri",
+      agentType: "MISTRI",
+      phone: "9988776655",
+      defaultPercent: 3.0,
+      defaultBasis: "TAXABLE",
+      defaultTrigger: "ON_INVOICE",
+      openingBalance: 0,
+      currentBalance: 0,
+      totalEarned: 0,
+      totalPaid: 0,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("agents").get());
 });
 
-test("Cross-user access is denied (Bob cannot read or mutate Alice's items)", async () => {
+test("Cross-user access is denied (Bob cannot read or mutate Alice's items or agents)", async () => {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const now = new Date();
-    await context.firestore().collection("users").doc(ALICE_UID).collection("items").doc("i1").set({
+    await context.firestore().collection("users").doc(ALICE_UID).collection("agents").doc("a1").set({
       userId: ALICE_UID,
-      name: "Secret SKU",
-      itemType: "PRODUCT",
-      unit: "PCS",
-      salePrice: 100,
-      purchasePrice: 80,
-      taxRatePercent: 18,
-      currentStock: 10,
+      name: "Secret Mistri",
+      agentType: "MISTRI",
+      openingBalance: 0,
+      currentBalance: 500,
       createdAt: now,
       updatedAt: now,
     });
   });
 
   const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("items").doc("i1").get());
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("items").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("agents").doc("a1").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("agents").get());
 });
 
 test("Shadow update with ghost field or updating cancelled transaction is rejected", async () => {
@@ -130,24 +150,51 @@ test("Shadow update with ghost field or updating cancelled transaction is reject
     txRef.set({
       userId: ALICE_UID,
       txType: "SALE",
-      refNumber: "INV-01",
+      refNumber: "INV/26-27/0001",
       dateMillis: Date.now(),
-      totalAmount: 500,
+      isInterState: false,
+      cgstAmount: 25,
+      sgstAmount: 25,
+      igstAmount: 0,
+      taxAmount: 50,
+      totalAmount: 550,
       paidAmount: 0,
-      balanceAmount: 500,
+      balanceAmount: 550,
       status: "UNPAID",
       createdAt: now,
       updatedAt: now,
     })
   );
 
-  await assertSucceeds(txRef.update({ status: "CANCELLED", updatedAt: new Date() }));
-  await assertFails(txRef.update({ paidAmount: 500, balanceAmount: 0, status: "PAID", updatedAt: new Date() }));
+  await assertSucceeds(
+    txRef.update({
+      status: "CANCELLED",
+      cancelReason: "Customer changed mind",
+      cancelledAtMillis: Date.now(),
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(txRef.update({ paidAmount: 550, balanceAmount: 0, status: "PAID", updatedAt: new Date() }));
 });
 
-test("Transactions cannot be deleted directly (immutable ledger)", async () => {
+test("Transactions stay immutable while profile exists, but can be wiped after profile deletion", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const now = new Date();
+  const profileRef = aliceDb.collection("users").doc(ALICE_UID).collection("settings").doc("profile");
+  await assertSucceeds(
+    profileRef.set({
+      userId: ALICE_UID,
+      businessName: "Alice Mart",
+      currencySymbol: "₹",
+      nextInvoiceNumber: 1,
+      themeStyle: "DYNAMIC",
+      stopNegativeStock: false,
+      roundOffTotal: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
   const txRef = aliceDb.collection("users").doc(ALICE_UID).collection("transactions").doc("tx2");
   await assertSucceeds(
     txRef.set({
@@ -163,5 +210,10 @@ test("Transactions cannot be deleted directly (immutable ledger)", async () => {
       updatedAt: now,
     })
   );
+  // While profile exists, transaction cannot be deleted
   await assertFails(txRef.delete());
+
+  // After owner deletes profile during account deletion, owner can wipe transactions
+  await assertSucceeds(profileRef.delete());
+  await assertSucceeds(txRef.delete());
 });

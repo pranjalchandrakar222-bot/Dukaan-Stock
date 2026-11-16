@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,14 +41,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.BusinessProfile
 import com.example.data.model.BusinessTransaction
+import com.example.data.model.Party
 import com.example.data.model.TxStatus
 import com.example.data.model.TxType
 import com.example.ui.theme.LocalDukaanColors
+import com.example.ui.util.MoneyUtils
+import com.example.ui.util.PdfInvoiceHelper
 import com.example.ui.util.amountInWords
 import com.example.ui.util.buildShareInvoiceText
+import com.example.ui.util.buildUpiPaymentUri
 import com.example.ui.util.formatCurrency
 import com.example.ui.util.formatDate
 import com.example.ui.util.formatQty
+import com.example.ui.util.launchUpiIntent
 import com.example.ui.util.shareText
 
 @Composable
@@ -56,14 +65,17 @@ fun KpiMetricCard(
   accentColor: Color,
   containerColor: Color,
   modifier: Modifier = Modifier,
+  cardColor: Color = MaterialTheme.colorScheme.surface,
+  cardBorderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+  valueColor: Color = MaterialTheme.colorScheme.onSurface,
   onClick: (() -> Unit)? = null,
 ) {
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(18.dp),
-    color = MaterialTheme.colorScheme.surface,
+    color = cardColor,
     tonalElevation = 1.dp,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    border = BorderStroke(1.dp, cardBorderColor),
     onClick = { onClick?.invoke() },
     enabled = onClick != null,
   ) {
@@ -99,7 +111,7 @@ fun KpiMetricCard(
         text = value,
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = valueColor,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -112,6 +124,64 @@ fun KpiMetricCard(
         overflow = TextOverflow.Ellipsis,
       )
     }
+  }
+}
+
+@Composable
+fun MonogramAvatar(
+  name: String,
+  modifier: Modifier = Modifier,
+  sizeDp: Int = 44,
+  cornerDp: Int = 999,
+) {
+  val words = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+  val initials =
+    when {
+      words.size >= 2 -> "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
+      words.size == 1 -> words[0].take(2).uppercase()
+      else -> "DS"
+    }
+  val palette =
+    listOf(
+      Color(0xFFDBEAFE) to Color(0xFF1E40AF), // Cobalt
+      Color(0xFFFEE2E2) to Color(0xFF991B1B), // Coral
+      Color(0xFFDCFCE7) to Color(0xFF166534), // Emerald
+      Color(0xFFEDE9FE) to Color(0xFF5B21B6), // Violet
+      Color(0xFFFEF3C7) to Color(0xFF92400E), // Amber
+      Color(0xFFE0F2FE) to Color(0xFF075985), // Sky
+    )
+  val (bg, fg) = palette[kotlin.math.abs(name.hashCode()) % palette.size]
+  val shape = if (cornerDp >= 500) CircleShape else RoundedCornerShape(cornerDp.dp)
+  Surface(
+    shape = shape,
+    color = bg,
+    modifier = modifier.size(sizeDp.dp),
+  ) {
+    Box(contentAlignment = Alignment.Center) {
+      Text(
+        text = initials,
+        style = if (sizeDp >= 48) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = fg,
+      )
+    }
+  }
+}
+
+@Composable
+fun NewFeatureBadge(modifier: Modifier = Modifier) {
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(999.dp),
+    color = Color(0xFF16A34A),
+  ) {
+    Text(
+      text = "NEW",
+      style = MaterialTheme.typography.labelSmall,
+      fontWeight = FontWeight.Bold,
+      color = Color.White,
+      modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+    )
   }
 }
 
@@ -208,10 +278,15 @@ fun EmptyStateCard(
   }
 }
 
+/**
+ * Customer-facing Tax Invoice / Voucher Preview.
+ * Strictly excludes internal Agent/Mistri commission figures.
+ */
 @Composable
 fun TaxInvoicePreviewCard(
   transaction: BusinessTransaction,
   profile: BusinessProfile?,
+  party: Party? = null,
   accentColor: Color = MaterialTheme.colorScheme.primary,
   showShareAction: Boolean = true,
   modifier: Modifier = Modifier,
@@ -228,8 +303,17 @@ fun TaxInvoicePreviewCard(
       TxType.CREDIT_NOTE -> "CREDIT NOTE"
       TxType.DEBIT_NOTE -> "DEBIT NOTE"
       TxType.DELIVERY_CHALLAN -> "DELIVERY CHALLAN"
+      TxType.PAYMENT_IN -> "PAYMENT RECEIPT"
+      TxType.PAYMENT_OUT -> "PAYMENT VOUCHER"
+      TxType.EXPENSE -> "EXPENSE VOUCHER"
+      TxType.CASH_TRANSFER -> "ACCOUNT TRANSFER"
+      TxType.CASH_ADJUSTMENT -> "BALANCE ADJUSTMENT"
+      TxType.STOCK_ADJUSTMENT -> "STOCK ADJUSTMENT"
+      TxType.COMMISSION_PAYOUT -> "COMMISSION PAYOUT"
       else -> "TAX INVOICE"
     }
+
+  val isCancelled = transaction.status == TxStatus.CANCELLED.name
 
   Surface(
     modifier = modifier.fillMaxWidth(),
@@ -239,10 +323,34 @@ fun TaxInvoicePreviewCard(
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
   ) {
     Column(modifier = Modifier.padding(18.dp)) {
+      if (isCancelled) {
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = Color(0xFFFEE2E2),
+          modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        ) {
+          Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+              text = "CANCELLED TRANSACTION",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFFB91C1C),
+            )
+            if (transaction.cancelReason.isNotBlank()) {
+              Text(
+                text = "Reason: ${transaction.cancelReason}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF991B1B),
+              )
+            }
+          }
+        }
+      }
+
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
       ) {
         Column(modifier = Modifier.weight(1f)) {
           Text(
@@ -267,7 +375,10 @@ fun TaxInvoicePreviewCard(
           }
           if (!profile?.address.isNullOrBlank()) {
             Text(
-              text = profile?.address.orEmpty(),
+              text = listOfNotNull(
+                profile?.address?.takeIf { it.isNotBlank() },
+                profile?.stateName?.takeIf { it.isNotBlank() },
+              ).joinToString(", "),
               style = MaterialTheme.typography.bodySmall,
               color = Color(0xFF64748B),
               maxLines = 2,
@@ -289,26 +400,44 @@ fun TaxInvoicePreviewCard(
             )
           }
           if (showShareAction) {
-            IconButton(
-              onClick = {
-                shareText(
-                  context = context,
-                  subject = "$docTitle ${transaction.refNumber}",
-                  text = buildShareInvoiceText(transaction, profile),
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+              IconButton(
+                onClick = {
+                  val ok = PdfInvoiceHelper.generateAndShareInvoicePdf(context, transaction, profile, party)
+                  if (!ok) {
+                    Toast.makeText(context, "Unable to share PDF", Toast.LENGTH_SHORT).show()
+                  }
+                },
+                modifier = Modifier.testTag("share_pdf_button"),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.PictureAsPdf,
+                  contentDescription = "Share Invoice PDF",
+                  tint = accentColor,
                 )
               }
-            ) {
-              Icon(
-                imageVector = Icons.Filled.Share,
-                contentDescription = "Share Invoice",
-                tint = accentColor,
-              )
+              IconButton(
+                onClick = {
+                  shareText(
+                    context = context,
+                    subject = "$docTitle ${transaction.refNumber}",
+                    text = buildShareInvoiceText(transaction, profile),
+                  )
+                },
+                modifier = Modifier.testTag("share_text_button"),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.Share,
+                  contentDescription = "Share Invoice Text",
+                  tint = accentColor,
+                )
+              }
             }
           }
         }
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(10.dp))
       HorizontalDivider(color = Color(0xFFE2E8F0))
       Spacer(modifier = Modifier.height(10.dp))
 
@@ -328,10 +457,24 @@ fun TaxInvoicePreviewCard(
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFF0F172A),
           )
+          if (party?.gstin?.isNotBlank() == true) {
+            Text(
+              text = "GSTIN: ${party.gstin}",
+              style = MaterialTheme.typography.bodySmall,
+              color = Color(0xFF475569),
+            )
+          }
+          if (transaction.placeOfSupply.isNotBlank()) {
+            Text(
+              text = "Place of Supply: ${transaction.placeOfSupply}",
+              style = MaterialTheme.typography.bodySmall,
+              color = Color(0xFF64748B),
+            )
+          }
         }
         Column(horizontalAlignment = Alignment.End) {
           Text(
-            text = "Invoice No: ${transaction.refNumber.ifBlank { "Draft" }}",
+            text = "Ref No: ${transaction.refNumber.ifBlank { "Draft" }}",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = accentColor,
@@ -341,6 +484,13 @@ fun TaxInvoicePreviewCard(
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFF475569),
           )
+          if (transaction.dueDateMillis > 0L) {
+            Text(
+              text = "Due: ${formatDate(transaction.dueDateMillis)}",
+              style = MaterialTheme.typography.bodySmall,
+              color = Color(0xFF64748B),
+            )
+          }
         }
       }
 
@@ -364,11 +514,11 @@ fun TaxInvoicePreviewCard(
 
       if (transaction.lineItems.isEmpty()) {
         Text(
-          text = "Add items on the left to see live GST line-item breakdown",
+          text = if (transaction.notes.isNotBlank()) transaction.notes else "No line items attached",
           style = MaterialTheme.typography.bodySmall,
-          color = Color(0xFF94A3B8),
+          color = Color(0xFF64748B),
           textAlign = TextAlign.Center,
-          modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+          modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
         )
       } else {
         transaction.lineItems.forEachIndexed { idx, line ->
@@ -434,8 +584,12 @@ fun TaxInvoicePreviewCard(
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFF334155),
           )
+          if (!profile?.upiId.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("UPI: ${profile?.upiId}", style = MaterialTheme.typography.labelSmall, color = accentColor, fontWeight = FontWeight.SemiBold)
+          }
           if (!profile?.bankDetails.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text("Bank Details", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64748B))
             Text(
               text = profile?.bankDetails.orEmpty(),
@@ -447,12 +601,26 @@ fun TaxInvoicePreviewCard(
 
         Column(modifier = Modifier.weight(0.95f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
           InvoiceSummaryLine("Sub Total", formatCurrency(transaction.subtotal, sym))
-          if (transaction.discountAmount > 0.005) {
-            InvoiceSummaryLine("Discount", "-${formatCurrency(transaction.discountAmount, sym)}")
+          val totalDisc = transaction.discountAmount + transaction.billDiscountAmount
+          if (totalDisc > 0.005) {
+            InvoiceSummaryLine("Discount", "-${formatCurrency(totalDisc, sym)}")
+          }
+          if (transaction.extraChargesAmount > 0.005) {
+            InvoiceSummaryLine(
+              transaction.extraChargesLabel.ifBlank { "Extra Charges" },
+              formatCurrency(transaction.extraChargesAmount, sym),
+            )
           }
           if (transaction.taxAmount > 0.005) {
-            InvoiceSummaryLine("CGST", formatCurrency(transaction.taxAmount / 2.0, sym))
-            InvoiceSummaryLine("SGST", formatCurrency(transaction.taxAmount / 2.0, sym))
+            if (transaction.isInterState || transaction.igstAmount > 0.005) {
+              val igst = if (transaction.igstAmount > 0.0) transaction.igstAmount else transaction.taxAmount
+              InvoiceSummaryLine("IGST", formatCurrency(igst, sym))
+            } else {
+              val cgst = if (transaction.cgstAmount > 0.0) transaction.cgstAmount else MoneyUtils.round2(transaction.taxAmount / 2.0)
+              val sgst = if (transaction.sgstAmount > 0.0) transaction.sgstAmount else MoneyUtils.round2(transaction.taxAmount - cgst)
+              InvoiceSummaryLine("CGST", formatCurrency(cgst, sym))
+              InvoiceSummaryLine("SGST", formatCurrency(sgst, sym))
+            }
           }
           if (kotlin.math.abs(transaction.roundOffAmount) > 0.001) {
             InvoiceSummaryLine("Round Off", formatCurrency(transaction.roundOffAmount, sym))
@@ -470,6 +638,34 @@ fun TaxInvoicePreviewCard(
           }
           InvoiceSummaryLine("Received / Paid", formatCurrency(transaction.paidAmount, sym))
           InvoiceSummaryLine("Balance Due", formatCurrency(transaction.balanceAmount, sym), bold = true)
+        }
+      }
+
+      if (showShareAction &&
+        !isCancelled &&
+        !profile?.upiId.isNullOrBlank() &&
+        transaction.balanceAmount > 0.01 &&
+        transaction.txType == TxType.SALE.name
+      ) {
+        Spacer(modifier = Modifier.height(10.dp))
+        FilledTonalButton(
+          onClick = {
+            val uri = buildUpiPaymentUri(
+              upiId = profile?.upiId.orEmpty(),
+              payeeName = bizName,
+              amount = transaction.balanceAmount,
+              note = "Payment ${transaction.refNumber}",
+            )
+            if (!launchUpiIntent(context, uri)) {
+              Toast.makeText(context, "No UPI app installed to open payment link", Toast.LENGTH_SHORT).show()
+            }
+          },
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier.fillMaxWidth().testTag("pay_via_upi_button"),
+        ) {
+          Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("Pay ${formatCurrency(transaction.balanceAmount, sym)} via UPI")
         }
       }
 

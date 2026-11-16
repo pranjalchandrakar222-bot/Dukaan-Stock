@@ -1,9 +1,10 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,12 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.AssignmentReturn
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Transform
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,7 +43,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.model.BusinessProfile
@@ -61,12 +62,12 @@ import com.example.data.model.Party
 import com.example.data.model.PaymentMode
 import com.example.data.model.TxStatus
 import com.example.data.model.TxType
-import com.example.data.model.statusEnum
 import com.example.data.model.txTypeEnum
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.KpiMetricCard
 import com.example.ui.components.TaxInvoicePreviewCard
 import com.example.ui.theme.LocalDukaanColors
+import com.example.ui.util.TaxAndCommissionCalculator
 import com.example.ui.util.formatCurrency
 
 enum class TransactionHubMode(val title: String, val types: List<TxType>) {
@@ -93,6 +94,7 @@ enum class TransactionHubMode(val title: String, val types: List<TxType>) {
   ),
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionsScreen(
   mode: TransactionHubMode,
@@ -103,9 +105,11 @@ fun TransactionsScreen(
   selectedTransactionForDetail: BusinessTransaction?,
   onSelectTransaction: (BusinessTransaction?) -> Unit,
   onOpenInvoiceBuilder: (TxType) -> Unit,
+  onConvertToSale: (BusinessTransaction) -> Unit,
+  onCreateCreditNote: (BusinessTransaction) -> Unit,
   onRecordQuickVoucher: (BusinessTransaction) -> Unit,
   onRecordSettlement: (BusinessTransaction, Double, String) -> Unit,
-  onCancelTransaction: (String) -> Unit,
+  onCancelTransaction: (String, String) -> Unit,
 ) {
   val sym = profile?.currencySymbol ?: "₹"
   val semantic = LocalDukaanColors.current
@@ -114,6 +118,10 @@ fun TransactionsScreen(
   var searchQuery by remember { mutableStateOf("") }
   var showQuickVoucherType by remember { mutableStateOf<TxType?>(null) }
   var settlementTarget by remember { mutableStateOf<BusinessTransaction?>(null) }
+  var cancelConfirmTarget by remember { mutableStateOf<BusinessTransaction?>(null) }
+
+  val activeParties = remember(parties) { parties.filter { it.isActive } }
+  val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
 
   val modeTransactions =
     remember(transactions, mode) {
@@ -158,7 +166,10 @@ fun TransactionsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
           if (mode == TransactionHubMode.SALE) {
             FilledTonalButton(
               onClick = { showQuickVoucherType = TxType.PAYMENT_IN },
@@ -208,21 +219,39 @@ fun TransactionsScreen(
     item {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         KpiMetricCard(
-          title = "Total Amount",
+          title = if (mode == TransactionHubMode.SALE) "Total Sales" else "Total Spend",
           value = formatCurrency(totalAmt, sym),
-          subtitle = "Paid: ${formatCurrency(paidAmt, sym)}",
+          subtitle = "${activeTxs.size} active entries",
           icon = Icons.AutoMirrored.Filled.ReceiptLong,
           accentColor = MaterialTheme.colorScheme.primary,
-          containerColor = MaterialTheme.colorScheme.primaryContainer,
+          containerColor = MaterialTheme.colorScheme.surface,
+          cardColor = semantic.infoCardBg,
+          cardBorderColor = semantic.infoCardBorder,
+          valueColor = MaterialTheme.colorScheme.primary,
           modifier = Modifier.weight(1f),
         )
         KpiMetricCard(
-          title = "Pending Balance",
+          title = if (mode == TransactionHubMode.SALE) "Collected" else "Paid",
+          value = formatCurrency(paidAmt, sym),
+          subtitle = "Settled",
+          icon = Icons.Filled.Payments,
+          accentColor = semantic.positive,
+          containerColor = MaterialTheme.colorScheme.surface,
+          cardColor = semantic.positiveCardBg,
+          cardBorderColor = semantic.positiveCardBorder,
+          valueColor = semantic.positive,
+          modifier = Modifier.weight(1f),
+        )
+        KpiMetricCard(
+          title = "Unpaid Dues",
           value = formatCurrency(balanceAmt, sym),
-          subtitle = "${activeTxs.count { it.balanceAmount > 0.01 }} open dues",
+          subtitle = "${activeTxs.count { it.balanceAmount > 0.01 }} open",
           icon = Icons.Filled.AccountBalanceWallet,
           accentColor = semantic.warning,
-          containerColor = semantic.warningContainer,
+          containerColor = MaterialTheme.colorScheme.surface,
+          cardColor = semantic.warningCardBg,
+          cardBorderColor = semantic.warningCardBorder,
+          valueColor = semantic.warning,
           modifier = Modifier.weight(1f),
         )
       }
@@ -290,10 +319,18 @@ fun TransactionsScreen(
   // Transaction Preview & Action Dialog
   val detailTx = selectedTransactionForDetail
   if (detailTx != null) {
+    val detailParty = parties.firstOrNull { it.id == detailTx.partyId }
     val canSettle =
       detailTx.status != TxStatus.CANCELLED.name &&
         detailTx.balanceAmount > 0.01 &&
         (detailTx.txType == TxType.SALE.name || detailTx.txType == TxType.PURCHASE.name)
+    val canConvert =
+      detailTx.status != TxStatus.CANCELLED.name &&
+        detailTx.status != TxStatus.CONVERTED.name &&
+        detailTx.txType in listOf(TxType.ESTIMATE.name, TxType.SALE_ORDER.name, TxType.DELIVERY_CHALLAN.name)
+    val canIssueReturn =
+      detailTx.status != TxStatus.CANCELLED.name && detailTx.txType == TxType.SALE.name
+
     AlertDialog(
       onDismissRequest = { onSelectTransaction(null) },
       title = { Text("${detailTx.txTypeEnum().label} • ${detailTx.refNumber}") },
@@ -302,23 +339,54 @@ fun TransactionsScreen(
           TaxInvoicePreviewCard(
             transaction = detailTx,
             profile = profile,
+            party = detailParty,
             accentColor = MaterialTheme.colorScheme.primary,
           )
         }
       },
       confirmButton = {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
           if (detailTx.status != TxStatus.CANCELLED.name) {
             OutlinedButton(
               onClick = {
-                onCancelTransaction(detailTx.id)
+                cancelConfirmTarget = detailTx
                 onSelectTransaction(null)
               },
               colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+              modifier = Modifier.testTag("cancel_transaction_button"),
             ) {
               Icon(Icons.Filled.Block, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(4.dp))
               Text("Cancel")
+            }
+          }
+          if (canConvert) {
+            FilledTonalButton(
+              onClick = {
+                onSelectTransaction(null)
+                onConvertToSale(detailTx)
+              },
+              modifier = Modifier.testTag("convert_to_sale_button"),
+            ) {
+              Icon(Icons.Filled.Transform, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Convert to Sale")
+            }
+          }
+          if (canIssueReturn) {
+            FilledTonalButton(
+              onClick = {
+                onSelectTransaction(null)
+                onCreateCreditNote(detailTx)
+              },
+              modifier = Modifier.testTag("issue_credit_note_button"),
+            ) {
+              Icon(Icons.AutoMirrored.Filled.AssignmentReturn, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Issue Return")
             }
           }
           if (canSettle) {
@@ -347,12 +415,25 @@ fun TransactionsScreen(
     )
   }
 
+  // Cancel Confirmation + Reason Dialog
+  val cancelTx = cancelConfirmTarget
+  if (cancelTx != null) {
+    CancelTransactionDialog(
+      tx = cancelTx,
+      onDismiss = { cancelConfirmTarget = null },
+      onConfirm = { reason ->
+        onCancelTransaction(cancelTx.id, reason)
+        cancelConfirmTarget = null
+      },
+    )
+  }
+
   // Settlement Dialog
   val settleTx = settlementTarget
   if (settleTx != null) {
     SettleBalanceDialog(
       tx = settleTx,
-      accounts = accounts,
+      accounts = activeAccounts,
       currencySymbol = sym,
       onDismiss = { settlementTarget = null },
       onConfirm = { amount, accId ->
@@ -367,8 +448,10 @@ fun TransactionsScreen(
   if (quickType != null) {
     QuickVoucherDialog(
       txType = quickType,
-      parties = parties,
-      accounts = accounts,
+      parties = activeParties,
+      accounts = activeAccounts,
+      transactions = transactions,
+      profile = profile,
       currencySymbol = sym,
       onDismiss = { showQuickVoucherType = null },
       onSave = { tx ->
@@ -377,6 +460,47 @@ fun TransactionsScreen(
       },
     )
   }
+}
+
+@Composable
+fun CancelTransactionDialog(
+  tx: BusinessTransaction,
+  onDismiss: () -> Unit,
+  onConfirm: (String) -> Unit,
+) {
+  var reason by remember { mutableStateOf("") }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Cancel ${tx.refNumber}?") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+          "Cancelling this entry will automatically reverse all stock quantities, party receivable/payable balances, cash/bank balances, and any accrued agent commissions.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+          value = reason,
+          onValueChange = { reason = it },
+          label = { Text("Cancellation Reason") },
+          placeholder = { Text("e.g. Customer returned order / Duplicate entry") },
+          modifier = Modifier.fillMaxWidth().testTag("cancel_reason_input"),
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onConfirm(reason.trim().ifBlank { "Cancelled by user" }) },
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.testTag("confirm_cancel_tx_button"),
+      ) {
+        Text("Confirm Cancel")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Keep Entry") }
+    },
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -452,20 +576,21 @@ fun QuickVoucherDialog(
   initialParty: Party? = null,
   parties: List<Party>,
   accounts: List<CashBankAccount>,
+  transactions: List<BusinessTransaction> = emptyList(),
+  profile: BusinessProfile? = null,
   currencySymbol: String,
   onDismiss: () -> Unit,
   onSave: (BusinessTransaction) -> Unit,
 ) {
-  val prefix =
-    when (txType) {
-      TxType.PAYMENT_IN -> "RCPT-"
-      TxType.PAYMENT_OUT -> "PAY-"
-      else -> "EXP-"
-    }
-  var refNumber by remember { mutableStateOf("$prefix${(100..999).random()}") }
+  var refNumber by remember {
+    mutableStateOf(TaxAndCommissionCalculator.formatDocumentRef(txType, profile))
+  }
   var selectedPartyId by remember { mutableStateOf(initialParty?.id ?: "") }
   var partyName by remember { mutableStateOf(initialParty?.name ?: "") }
   var partyExpanded by remember { mutableStateOf(false) }
+
+  var linkedTxId by remember { mutableStateOf("") }
+  var linkExpanded by remember { mutableStateOf(false) }
 
   var category by remember { mutableStateOf(if (txType == TxType.EXPENSE) "Rent" else "") }
   var amountText by remember { mutableStateOf("") }
@@ -475,6 +600,20 @@ fun QuickVoucherDialog(
   var notes by remember { mutableStateOf("") }
 
   val expenseCategories = listOf("Rent", "Electricity", "Transport", "Staff Salary", "Packaging", "Tea & Misc")
+
+  val openInvoices = remember(transactions, selectedPartyId, txType) {
+    if (txType != TxType.PAYMENT_IN) {
+      emptyList()
+    } else {
+      transactions.filter {
+        it.txType == TxType.SALE.name &&
+          it.status != TxStatus.CANCELLED.name &&
+          it.balanceAmount > 0.01 &&
+          (selectedPartyId.isBlank() || it.partyId == selectedPartyId)
+      }
+    }
+  }
+  val linkedInv = openInvoices.firstOrNull { it.id == linkedTxId }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -523,6 +662,7 @@ fun QuickVoucherDialog(
               onValueChange = {
                 partyName = it
                 selectedPartyId = ""
+                linkedTxId = ""
               },
               label = { Text("Party Name *") },
               trailingIcon = {
@@ -541,9 +681,49 @@ fun QuickVoucherDialog(
                   onClick = {
                     selectedPartyId = p.id
                     partyName = p.name
+                    linkedTxId = ""
                     partyExpanded = false
                   },
                 )
+              }
+            }
+          }
+
+          if (txType == TxType.PAYMENT_IN && openInvoices.isNotEmpty()) {
+            ExposedDropdownMenuBox(expanded = linkExpanded, onExpandedChange = { linkExpanded = it }) {
+              OutlinedTextField(
+                value = linkedInv?.let { "${it.refNumber} (Due ${formatCurrency(it.balanceAmount, currencySymbol)})" }
+                  ?: "General On-Account Payment",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Link Unpaid Sale Invoice") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = linkExpanded) },
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+              )
+              ExposedDropdownMenu(expanded = linkExpanded, onDismissRequest = { linkExpanded = false }) {
+                DropdownMenuItem(
+                  text = { Text("General On-Account Payment") },
+                  onClick = {
+                    linkedTxId = ""
+                    linkExpanded = false
+                  },
+                )
+                openInvoices.forEach { inv ->
+                  DropdownMenuItem(
+                    text = {
+                      Text("${inv.refNumber} • ${inv.partyName} • Due ${formatCurrency(inv.balanceAmount, currencySymbol)}")
+                    },
+                    onClick = {
+                      linkedTxId = inv.id
+                      if (inv.partyId.isNotBlank()) {
+                        selectedPartyId = inv.partyId
+                        partyName = inv.partyName
+                      }
+                      amountText = inv.balanceAmount.toString()
+                      linkExpanded = false
+                    },
+                  )
+                }
               }
             }
           }
@@ -616,6 +796,7 @@ fun QuickVoucherDialog(
               dateMillis = System.currentTimeMillis(),
               partyId = selectedPartyId,
               partyName = partyName.trim().ifBlank { category.trim() },
+              linkedTxId = linkedTxId,
               category = category.trim(),
               paymentMode = paymentMode.name,
               accountId = selectedAccountId,

@@ -2,7 +2,7 @@
   "entities": {
     "BusinessProfile": {
       "title": "BusinessProfile",
-      "description": "Store profile, GSTIN, invoice numbering, and UI theme preference for a Dukaan Stock business owner.",
+      "description": "Store profile, GSTIN, per-type invoice numbering, UPI ID, and UI theme preference.",
       "type": "object",
       "properties": {
         "userId": { "type": "string", "description": "Firebase Auth UID of owner" },
@@ -15,6 +15,17 @@
         "currencySymbol": { "type": "string" },
         "invoicePrefix": { "type": "string" },
         "nextInvoiceNumber": { "type": "integer" },
+        "nextPurchaseNumber": { "type": "integer" },
+        "nextEstimateNumber": { "type": "integer" },
+        "nextSaleOrderNumber": { "type": "integer" },
+        "nextChallanNumber": { "type": "integer" },
+        "nextCreditNoteNumber": { "type": "integer" },
+        "nextDebitNoteNumber": { "type": "integer" },
+        "nextPaymentNumber": { "type": "integer" },
+        "nextExpenseNumber": { "type": "integer" },
+        "nextCommissionPayoutNumber": { "type": "integer" },
+        "useFinancialYearPrefix": { "type": "boolean" },
+        "upiId": { "type": "string" },
         "bankDetails": { "type": "string" },
         "invoiceTerms": { "type": "string" },
         "themeStyle": {
@@ -23,8 +34,8 @@
         },
         "stopNegativeStock": { "type": "boolean" },
         "roundOffTotal": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": [
         "userId",
@@ -49,10 +60,13 @@
         "phone": { "type": "string" },
         "email": { "type": "string" },
         "gstin": { "type": "string" },
+        "stateName": { "type": "string" },
         "billingAddress": { "type": "string" },
         "shippingAddress": { "type": "string" },
         "openingBalance": { "type": "number" },
         "currentBalance": { "type": "number" },
+        "defaultAgentId": { "type": "string" },
+        "isActive": { "type": "boolean" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -61,7 +75,7 @@
     },
     "InventoryItem": {
       "title": "InventoryItem",
-      "description": "Product or service item with HSN/SAC, pricing, GST slab, and live stock tracking.",
+      "description": "Product or service item with HSN/SAC, pricing, GST slab, commission %, and live stock tracking.",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
@@ -77,10 +91,12 @@
         "purchasePrice": { "type": "number" },
         "discountPercent": { "type": "number" },
         "taxRatePercent": { "type": "number" },
+        "commissionPercent": { "type": "number" },
         "openingStock": { "type": "number" },
         "currentStock": { "type": "number" },
         "minStockLevel": { "type": "number" },
         "location": { "type": "string" },
+        "isActive": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -111,14 +127,42 @@
         "upiId": { "type": "string" },
         "openingBalance": { "type": "number" },
         "currentBalance": { "type": "number" },
+        "isActive": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "accountName", "accountType", "openingBalance", "currentBalance", "createdAt", "updatedAt"]
     },
+    "Agent": {
+      "title": "Agent",
+      "description": "Sales agent, mistri, technician, architect, or referral partner for commission tracking and payouts.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "agentType": { "type": "string", "enum": ["AGENT", "MISTRI", "SALESMAN", "ARCHITECT", "CONTRACTOR", "REFERRAL"] },
+        "phone": { "type": "string" },
+        "cityArea": { "type": "string" },
+        "upiId": { "type": "string" },
+        "bankDetails": { "type": "string" },
+        "defaultPercent": { "type": "number" },
+        "defaultPerUnitAmount": { "type": "number" },
+        "defaultBasis": { "type": "string", "enum": ["TAXABLE", "TOTAL", "PROFIT", "PER_UNIT"] },
+        "defaultTrigger": { "type": "string", "enum": ["ON_INVOICE", "ON_COLLECTION"] },
+        "openingBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "agentType", "openingBalance", "currentBalance", "createdAt", "updatedAt"]
+    },
     "BusinessTransaction": {
       "title": "BusinessTransaction",
-      "description": "GST invoice, purchase bill, expense, estimate, order, or payment voucher.",
+      "description": "GST invoice, purchase bill, expense, estimate, order, commission payout, or audit adjustment voucher.",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
@@ -135,25 +179,53 @@
             "PAYMENT_OUT",
             "EXPENSE",
             "PURCHASE_ORDER",
-            "DEBIT_NOTE"
+            "DEBIT_NOTE",
+            "COMMISSION_PAYOUT",
+            "CASH_TRANSFER",
+            "CASH_ADJUSTMENT",
+            "STOCK_ADJUSTMENT"
           ]
         },
         "refNumber": { "type": "string" },
         "dateMillis": { "type": "integer" },
+        "dueDateMillis": { "type": "integer" },
         "partyId": { "type": "string" },
         "partyName": { "type": "string" },
+        "placeOfSupply": { "type": "string" },
+        "isInterState": { "type": "boolean" },
         "category": { "type": "string" },
         "paymentMode": { "type": "string", "enum": ["CASH", "UPI", "BANK_TRANSFER", "CARD", "CHEQUE"] },
         "accountId": { "type": "string" },
+        "toAccountId": { "type": "string" },
+        "linkedTxId": { "type": "string" },
         "lineItems": { "type": "array" },
         "subtotal": { "type": "number" },
         "discountAmount": { "type": "number" },
+        "billDiscountAmount": { "type": "number" },
+        "extraChargesLabel": { "type": "string" },
+        "extraChargesAmount": { "type": "number" },
+        "cgstAmount": { "type": "number" },
+        "sgstAmount": { "type": "number" },
+        "igstAmount": { "type": "number" },
         "taxAmount": { "type": "number" },
         "roundOffAmount": { "type": "number" },
         "totalAmount": { "type": "number" },
         "paidAmount": { "type": "number" },
         "balanceAmount": { "type": "number" },
         "status": { "type": "string", "enum": ["PAID", "PARTIAL", "UNPAID", "OPEN", "CONVERTED", "CANCELLED"] },
+        "agentId": { "type": "string" },
+        "agentName": { "type": "string" },
+        "commissionBasis": { "type": "string", "enum": ["TAXABLE", "TOTAL", "PROFIT", "PER_UNIT"] },
+        "commissionTrigger": { "type": "string", "enum": ["ON_INVOICE", "ON_COLLECTION"] },
+        "commissionStatus": { "type": "string", "enum": ["NONE", "ACCRUED", "PENDING_COLLECTION", "PARTIAL", "PAID", "REVERSED"] },
+        "commissionRatePercent": { "type": "number" },
+        "commissionTotalAmount": { "type": "number" },
+        "commissionAccruedAmount": { "type": "number" },
+        "commissionSplits": { "type": "array" },
+        "tdsPercent": { "type": "number" },
+        "tdsAmount": { "type": "number" },
+        "cancelReason": { "type": "string" },
+        "cancelledAtMillis": { "type": "integer" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -189,9 +261,13 @@
       "schema": { "$ref": "#/entities/CashBankAccount" },
       "description": "User-owned cash registers, bank accounts, and UPI wallets"
     },
+    "/users/{userId}/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/Agent" },
+      "description": "User-owned agents, mistris, technicians, and referral partner commission ledgers"
+    },
     "/users/{userId}/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/BusinessTransaction" },
-      "description": "User-owned sales, purchases, expenses, estimates, and payment vouchers"
+      "description": "User-owned sales, purchases, expenses, estimates, commission payouts, and audit vouchers"
     }
   }
 }

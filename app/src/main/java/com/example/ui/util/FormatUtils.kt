@@ -2,38 +2,58 @@ package com.example.ui.util
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import com.example.data.model.BusinessProfile
 import com.example.data.model.BusinessTransaction
+import com.example.data.model.TxType
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.roundToLong
 
-private val amountFormatter = DecimalFormat("#,##,##0.00")
 private val compactQtyFormatter = DecimalFormat("#,##0.##")
 
+private fun formatIndianNumber(absAmount: Double): String {
+  val totalPaise = MoneyUtils.toPaise(MoneyUtils.round2(absAmount))
+  val whole = totalPaise / 100L
+  val paise = (totalPaise % 100L).toInt()
+  val wholeStr = whole.toString()
+  val grouped = if (wholeStr.length <= 3) {
+    wholeStr
+  } else {
+    val last3 = wholeStr.takeLast(3)
+    val prefix = wholeStr.dropLast(3)
+    val prefixGrouped = prefix.reversed().chunked(2).joinToString(",").reversed()
+    "$prefixGrouped,$last3"
+  }
+  return "$grouped.${paise.toString().padStart(2, '0')}"
+}
+
 fun formatCurrency(amount: Double, symbol: String = "₹"): String {
-  val sign = if (amount < -0.005) "-" else ""
-  return "$sign$symbol${amountFormatter.format(abs(amount))}"
+  val rounded = MoneyUtils.round2(amount)
+  val sign = if (rounded < -0.005) "-" else ""
+  return "$sign$symbol${formatIndianNumber(abs(rounded))}"
 }
 
 fun formatQty(qty: Double): String = compactQtyFormatter.format(qty)
 
 fun formatDate(millis: Long): String {
+  if (millis <= 0L) return "-"
   val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
   return sdf.format(Date(millis))
 }
 
 fun formatDateTime(millis: Long): String {
+  if (millis <= 0L) return "-"
   val sdf = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
   return sdf.format(Date(millis))
 }
 
 fun amountInWords(amount: Double, currencySymbol: String = "₹"): String {
-  val whole = abs(amount).toLong()
-  val paise = ((abs(amount) - whole) * 100.0).roundToLong().toInt()
+  val paiseTotal = MoneyUtils.toPaise(abs(amount))
+  val whole = paiseTotal / 100L
+  val paise = (paiseTotal % 100L).toInt()
   val currencyName =
     when (currencySymbol) {
       "$" -> "Dollars"
@@ -87,6 +107,9 @@ private fun convertNumberToWords(n: Long): String {
   return sb.toString().trim()
 }
 
+/**
+ * Customer-facing text invoice share. Intentionally omits all internal Agent/Mistri commission data.
+ */
 fun buildShareInvoiceText(tx: BusinessTransaction, profile: BusinessProfile?): String {
   val sym = profile?.currencySymbol ?: "₹"
   val biz = profile?.businessName?.ifBlank { "Dukaan Stock" } ?: "Dukaan Stock"
@@ -97,7 +120,9 @@ fun buildShareInvoiceText(tx: BusinessTransaction, profile: BusinessProfile?): S
     appendLine("----------------------------")
     appendLine("Ref No: ${tx.refNumber}")
     appendLine("Date: ${formatDate(tx.dateMillis)}")
+    if (tx.dueDateMillis > 0L) appendLine("Due Date: ${formatDate(tx.dueDateMillis)}")
     if (tx.partyName.isNotBlank()) appendLine("Party: ${tx.partyName}")
+    if (tx.placeOfSupply.isNotBlank()) appendLine("Place of Supply: ${tx.placeOfSupply}")
     appendLine("----------------------------")
     if (tx.lineItems.isNotEmpty()) {
       tx.lineItems.forEachIndexed { idx, line ->
@@ -108,14 +133,53 @@ fun buildShareInvoiceText(tx: BusinessTransaction, profile: BusinessProfile?): S
       appendLine("----------------------------")
     }
     appendLine("Subtotal: ${formatCurrency(tx.subtotal, sym)}")
-    if (tx.taxAmount > 0) appendLine("GST Tax: ${formatCurrency(tx.taxAmount, sym)}")
+    val totalDisc = tx.discountAmount + tx.billDiscountAmount
+    if (totalDisc > 0.005) appendLine("Discount: -${formatCurrency(totalDisc, sym)}")
+    if (tx.extraChargesAmount > 0.005) {
+      appendLine("${tx.extraChargesLabel.ifBlank { "Extra Charges" }}: ${formatCurrency(tx.extraChargesAmount, sym)}")
+    }
+    if (tx.taxAmount > 0.005) {
+      if (tx.isInterState || tx.igstAmount > 0.005) {
+        appendLine("IGST: ${formatCurrency(if (tx.igstAmount > 0) tx.igstAmount else tx.taxAmount, sym)}")
+      } else {
+        val cgst = if (tx.cgstAmount > 0) tx.cgstAmount else tx.taxAmount / 2.0
+        val sgst = if (tx.sgstAmount > 0) tx.sgstAmount else tx.taxAmount - cgst
+        appendLine("CGST: ${formatCurrency(cgst, sym)} | SGST: ${formatCurrency(sgst, sym)}")
+      }
+    }
     appendLine("Total: ${formatCurrency(tx.totalAmount, sym)}")
     appendLine("Paid: ${formatCurrency(tx.paidAmount, sym)}")
     appendLine("Balance: ${formatCurrency(tx.balanceAmount, sym)}")
+    if (!profile?.upiId.isNullOrBlank() && tx.balanceAmount > 0.01 && tx.txType == TxType.SALE.name) {
+      appendLine("UPI ID: ${profile?.upiId}")
+    }
     if (!profile?.invoiceTerms.isNullOrBlank()) {
       appendLine()
       appendLine(profile?.invoiceTerms)
     }
+  }
+}
+
+fun buildUpiPaymentUri(
+  upiId: String,
+  payeeName: String,
+  amount: Double,
+  note: String,
+): String {
+  val cleanPa = Uri.encode(upiId.trim())
+  val cleanPn = Uri.encode(payeeName.trim().ifBlank { "Merchant" })
+  val cleanAm = String.format(Locale.US, "%.2f", MoneyUtils.round2(amount))
+  val cleanTn = Uri.encode(note.trim().ifBlank { "Invoice Payment" })
+  return "upi://pay?pa=$cleanPa&pn=$cleanPn&am=$cleanAm&cu=INR&tn=$cleanTn"
+}
+
+fun launchUpiIntent(context: Context, upiUri: String): Boolean {
+  return try {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(upiUri))
+    context.startActivity(Intent.createChooser(intent, "Pay via UPI"))
+    true
+  } catch (_: Exception) {
+    false
   }
 }
 
