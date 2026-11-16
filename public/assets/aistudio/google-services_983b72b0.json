@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "83454719802",
+    "project_id": "dukaan-stock-f2354",
+    "storage_bucket": "dukaan-stock-f2354.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:83454719802:android:4002c9da98fcd4bc8f4203",
+        "android_client_info": {
+          "package_name": "com.aistudio.dukaanstock.vmrkqz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC66vLBwKKq4NhBducLyGhEF5SYA5cffRY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
